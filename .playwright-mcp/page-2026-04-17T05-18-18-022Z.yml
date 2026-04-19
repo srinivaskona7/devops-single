@@ -1,0 +1,73 @@
+- generic [ref=e1]:
+  - generic [ref=e43]:
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - img [ref=e46]
+        - generic [ref=e49]: Cloud IDE
+        - generic [ref=e50]: — root@13.126.254.200
+      - button "Disconnect" [ref=e52] [cursor=pointer]
+    - generic [ref=e53]:
+      - generic [ref=e54]:
+        - button "Explorer (Ctrl+Shift+E)" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+        - button "Search (Ctrl+Shift+F)" [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+        - button "Settings" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+      - generic [ref=e67]:
+        - generic [ref=e68]:
+          - generic [ref=e69]: Explorer
+          - generic [ref=e70]:
+            - button "New File" [ref=e71] [cursor=pointer]:
+              - img [ref=e72]
+            - button "New Folder" [ref=e75] [cursor=pointer]:
+              - img [ref=e76]
+            - button "Refresh" [ref=e79] [cursor=pointer]:
+              - img [ref=e80]
+            - button "Toggle Hidden Files" [ref=e83] [cursor=pointer]:
+              - img [ref=e84]
+        - generic [ref=e87] [cursor=pointer]:
+          - img [ref=e89]
+          - img [ref=e92]
+          - generic [ref=e94]: test
+      - generic [ref=e96]:
+        - generic [ref=e164] [cursor=pointer]:
+          - img [ref=e166]
+          - generic [ref=e168]: hello.py
+          - button "Close" [ref=e169]:
+            - img [ref=e170]
+        - generic [ref=e98]:
+          - code [ref=e172]:
+            - generic [ref=e173]:
+              - generic [ref=e178]: "1"
+              - textbox "Editor content;Press Alt+F1 for Accessibility Options." [active] [ref=e186]
+          - generic [ref=e115]:
+            - generic [ref=e116]:
+              - generic [ref=e117] [cursor=pointer]: Terminal
+              - generic [ref=e118]:
+                - button "New Terminal" [ref=e119] [cursor=pointer]:
+                  - img [ref=e120]
+                - button "Maximize Panel" [ref=e122] [cursor=pointer]:
+                  - img [ref=e123]
+                - button "Close Panel" [ref=e125] [cursor=pointer]:
+                  - img [ref=e126]
+            - generic [ref=e131]:
+              - textbox "Terminal input" [ref=e132]
+              - generic [ref=e133]:
+                - generic [ref=e135]: "Last login: Fri Apr 17 04:28:16 2026 from 17.233.175.214"
+                - generic [ref=e137]: "[root@ip-172-31-33-18 ~]#"
+    - generic [ref=e145]:
+      - generic [ref=e146]:
+        - img [ref=e147]
+        - generic [ref=e149]: root@13.126.254.200
+      - generic [ref=e150]:
+        - img [ref=e151]
+        - generic [ref=e153]: main
+      - generic [ref=e155]: Ln 1, Col 1
+      - generic [ref=e157]: Python
+      - generic [ref=e159]: UTF-8
+  - generic [ref=e160]: "################################"
+  - generic [ref=e190]: Created hello.py
+  - generic [ref=e191]:
+    - alert
+    - alert

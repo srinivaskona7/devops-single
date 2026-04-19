@@ -1,0 +1,16 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e9]: CloudIDE
+    - paragraph [ref=e10]: DevOps Platform — Browser-based development environment
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - generic [ref=e13]: Username
+      - textbox "Username" [ref=e14]:
+        - /placeholder: admin
+    - generic [ref=e15]:
+      - generic [ref=e16]: Password
+      - textbox "Password" [ref=e17]:
+        - /placeholder: Enter password
+    - button "Sign In" [ref=e18] [cursor=pointer]

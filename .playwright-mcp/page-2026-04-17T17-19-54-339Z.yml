@@ -1,0 +1,59 @@
+- generic [ref=e42]:
+  - generic [ref=e43]:
+    - generic [ref=e44]:
+      - img [ref=e45]
+      - generic [ref=e48]: Cloud IDE
+    - button "Disconnect" [ref=e50] [cursor=pointer]
+  - generic [ref=e51]:
+    - generic [ref=e52]:
+      - button "Explorer (Ctrl+Shift+E)" [ref=e53] [cursor=pointer]:
+        - img [ref=e54]
+      - button "Search (Ctrl+Shift+F)" [ref=e56] [cursor=pointer]:
+        - img [ref=e57]
+      - button "DevOps Tools" [active] [ref=e60] [cursor=pointer]:
+        - img [ref=e61]
+      - button "Settings" [ref=e64] [cursor=pointer]:
+        - img [ref=e65]
+    - generic [ref=e70]:
+      - generic [ref=e71]: Explorer
+      - generic [ref=e72]:
+        - button "New File" [ref=e73] [cursor=pointer]:
+          - img [ref=e74]
+        - button "New Folder" [ref=e77] [cursor=pointer]:
+          - img [ref=e78]
+        - button "Refresh" [ref=e81] [cursor=pointer]:
+          - img [ref=e82]
+        - button "Toggle Hidden Files" [ref=e85] [cursor=pointer]:
+          - img [ref=e86]
+    - generic [ref=e92]:
+      - generic [ref=e94]:
+        - img [ref=e95]
+        - generic [ref=e98]: Open a file from the explorer to start editing
+        - generic [ref=e99]:
+          - generic [ref=e100]: Ctrl+S
+          - generic [ref=e101]: Save file
+          - generic [ref=e102]: Ctrl+P
+          - generic [ref=e103]: Quick open
+          - generic [ref=e104]: "Ctrl+`"
+          - generic [ref=e105]: Toggle terminal
+          - generic [ref=e106]: Ctrl+Shift+E
+          - generic [ref=e107]: Explorer
+      - generic [ref=e110]:
+        - generic [ref=e111] [cursor=pointer]: Terminal
+        - generic [ref=e112]:
+          - button "New Terminal" [ref=e113] [cursor=pointer]:
+            - img [ref=e114]
+          - button "Maximize Panel" [ref=e116] [cursor=pointer]:
+            - img [ref=e117]
+          - button "Close Panel" [ref=e119] [cursor=pointer]:
+            - img [ref=e120]
+  - generic [ref=e123]:
+    - generic [ref=e124]:
+      - img [ref=e125]
+      - generic [ref=e127]: Connected
+    - generic [ref=e128]:
+      - img [ref=e129]
+      - generic [ref=e131]: main
+    - generic [ref=e133]: Ln 1, Col 1
+    - generic [ref=e135]: Plain Text
+    - generic [ref=e137]: UTF-8

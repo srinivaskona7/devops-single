@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud IDE — Browser-Based Development Environment</title>
+  <meta name="description" content="A browser-based IDE with SSH connectivity, file explorer, Monaco editor, and integrated terminal.">
+  <meta name="theme-color" content="#7578e8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236366f1'/><stop offset='1' stop-color='%238b5cf6'/></linearGradient></defs><rect rx='20' width='100' height='100' fill='url(%23g)'/><text x='50' y='68' text-anchor='middle' fill='white' font-size='50' font-family='monospace' font-weight='bold'>C</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/login.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+  <style>
+    .monaco-editor .suggest-widget { z-index: 1001 !important; }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════ AUTH SCREEN ═══════════════════ -->
+  <div id="auth-screen">
+    <div class="login-container">
+      <div class="login-header">
+        <div class="login-logo">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+            <rect width="32" height="32" rx="8" fill="url(#logo-grad)"/>
+            <path d="M7 12h8v2H9v3h5v2H9v5H7V12zm10 0h8v2h-6v2h5v2h-5v3h6v2h-8V12z" fill="white" fill-opacity="0.9"/>
+          </svg>
+          <span class="login-logo-text">Cloud<span>IDE</span></span>
+        </div>
+        <p class="login-subtitle">DevOps Platform &mdash; Browser-based development environment</p>
+      </div>
+      <div class="login-card">
+        <div class="login-field">
+          <label for="auth-username">Username</label>
+          <input type="text" id="auth-username" placeholder="admin" spellcheck="false" autocomplete="username">
+        </div>
+        <div class="login-field">
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" placeholder="Enter password" autocomplete="current-password">
+        </div>
+        <button class="login-btn" id="auth-btn" type="button"><span class="btn-text">Sign In</span></button>
+        <div class="login-error" id="auth-error">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 3.75a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4zM8 12a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          <span id="auth-error-text"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ HOME SCREEN (after auth) ═══════════════════ -->
+  <div id="home-screen" style="display:none">
+    <div class="login-container">
+      <div class="login-header">
+        <div class="login-logo">
+          <svg viewBox="0 0 32 32" fill="none"><defs><linearGradient id="logo-grad2" x1="0" y1="0" x2="32" y2="32"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#logo-grad2)"/><path d="M7 12h8v2H9v3h5v2H9v5H7V12zm10 0h8v2h-6v2h5v2h-5v3h6v2h-8V12z" fill="white" fill-opacity="0.9"/></svg>
+          <span class="login-logo-text">Cloud<span>IDE</span></span>
+        </div>
+        <p class="login-subtitle">Select a workspace to get started</p>
+      </div>
+      <div class="home-options">
+        <div class="home-option" id="opt-ssh">
+          <div class="home-option-icon">🖥️</div>
+          <div class="home-option-info">
+            <div class="home-option-title">SSH Connect</div>
+            <div class="home-option-desc">Connect to a remote server via SSH with full IDE, terminal, and file explorer</div>
+          </div>
+        </div>
+        <div class="home-option" id="opt-k8s">
+          <div class="home-option-icon">☸️</div>
+          <div class="home-option-info">
+            <div class="home-option-title">Kubernetes Dashboard</div>
+            <div class="home-option-desc">Manage clusters, pods, services, Helm charts, and deploy templates</div>
+          </div>
+        </div>
+        <div class="home-option" id="opt-templates">
+          <div class="home-option-icon">🚀</div>
+          <div class="home-option-info">
+            <div class="home-option-title">DevOps Templates</div>
+            <div class="home-option-desc">30 ready-to-deploy templates: databases, CNCF stacks, hello world apps</div>
+          </div>
+        </div>
+        <div class="home-option" id="opt-srinivas">
+          <div class="home-option-icon">⚡</div>
+          <div class="home-option-info">
+            <div class="home-option-title">Srinivas App</div>
+            <div class="home-option-desc">Full-stack application with frontend, backend, and Docker deployment</div>
+          </div>
+        </div>
+        <div class="home-option" id="opt-kyma">
+          <div class="home-option-icon">☸️</div>
+          <div class="home-option-info">
+            <div class="home-option-title">Kyma Dashboard</div>
+            <div class="home-option-desc">Full Kubernetes/Kyma management dashboard with 34 resource pages</div>
+          </div>
+        </div>
+      </div>
+      <div class="login-footer" style="margin-top:24px">
+        Logged in as <strong id="home-user">admin</strong> &bull; <a href="#" id="home-logout" style="color:var(--accent-hover)">Sign out</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ LOGIN SCREEN (SSH) ═══════════════════ -->
+  <div id="login-screen" style="display:none">
+    <div class="login-container">
+      <div class="login-header">
+        <div class="login-logo">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+            <rect width="32" height="32" rx="8" fill="url(#logo-grad)"/>
+            <path d="M7 12h8v2H9v3h5v2H9v5H7V12zm10 0h8v2h-6v2h5v2h-5v3h6v2h-8V12z" fill="white" fill-opacity="0.9"/>
+          </svg>
+          <span class="login-logo-text">Cloud<span>IDE</span></span>
+        </div>
+        <p class="login-subtitle">Browser-based development environment</p>
+      </div>
+
+      <div class="login-card">
+        <div class="login-field">
+          <label for="proxy-url">Proxy Server URL</label>
+          <input type="text" id="proxy-url" placeholder="ws://localhost:3456" value="ws://localhost:3456" spellcheck="false">
+        </div>
+
+        <div class="login-row">
+          <div class="login-field">
+            <label for="ssh-host">SSH Host</label>
+            <input type="text" id="ssh-host" placeholder="192.168.1.100" spellcheck="false">
+          </div>
+          <div class="login-field small">
+            <label for="ssh-port">Port</label>
+            <input type="number" id="ssh-port" value="22" min="1" max="65535">
+          </div>
+        </div>
+
+        <div class="login-field">
+          <label for="ssh-username">Username</label>
+          <input type="text" id="ssh-username" placeholder="root" spellcheck="false" autocomplete="username">
+        </div>
+
+        <label style="display:block; font-size:12px; font-weight:500; color:#c9d1d9; margin-bottom:6px;">Authentication</label>
+        <div class="auth-toggle">
+          <button class="auth-toggle-btn active" data-method="password" type="button">
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:4px"><path d="M8 1a3.5 3.5 0 00-3.5 3.5V7H3a1 1 0 00-1 1v6a1 1 0 001 1h10a1 1 0 001-1V8a1 1 0 00-1-1h-1.5V4.5A3.5 3.5 0 008 1zm2 6H6V4.5a2 2 0 114 0V7z"/></svg>
+            Password
+          </button>
+          <button class="auth-toggle-btn" data-method="key" type="button">
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:4px"><path d="M6.5 10.5a3.5 3.5 0 113.15-5H15v2h-1v2h-2v-2h-1v2H9.65a3.5 3.5 0 01-3.15 1zM5 8.5a1 1 0 100-2 1 1 0 000 2z"/></svg>
+            SSH Key
+          </button>
+        </div>
+
+        <div class="password-area active">
+          <div class="login-field">
+            <label for="ssh-password">Password</label>
+            <input type="password" id="ssh-password" placeholder="Enter password" autocomplete="current-password">
+          </div>
+        </div>
+
+        <div class="key-upload-area">
+          <div class="login-field">
+            <label for="ssh-key">Private Key</label>
+            <textarea id="ssh-key" placeholder="Paste your private key here (-----BEGIN OPENSSH PRIVATE KEY-----...)" spellcheck="false"></textarea>
+            <label class="key-file-btn" for="key-file-input">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 13h9a.5.5 0 000-1h-9a.5.5 0 000 1zM8 10a.5.5 0 00.354-.146l2.5-2.5a.5.5 0 10-.708-.708L8.5 8.293V1.5a.5.5 0 00-1 0v6.793L5.854 6.646a.5.5 0 10-.708.708l2.5 2.5A.5.5 0 008 10z"/></svg>
+              Or upload key file
+            </label>
+            <input type="file" id="key-file-input" accept=".pem,.key,.pub,*">
+          </div>
+          <div class="login-field">
+            <label for="ssh-passphrase">Passphrase (optional)</label>
+            <input type="password" id="ssh-passphrase" placeholder="Key passphrase">
+          </div>
+        </div>
+
+        <div class="login-remember">
+          <input type="checkbox" id="remember-conn" checked>
+          <label for="remember-conn">Remember connection details</label>
+        </div>
+
+        <button class="login-btn" id="connect-btn" type="button">
+          <span class="btn-text">Connect</span>
+        </button>
+
+        <div class="login-error" id="login-error">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 3.75a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4zM8 12a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          <span id="login-error-text"></span>
+        </div>
+      </div>
+
+      <div class="login-footer">
+        Secure WebSocket connection &bull; Your credentials are never stored on the server
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ IDE WORKSPACE ═══════════════════ -->
+  <div id="app">
+    <!-- Title Bar -->
+    <div class="titlebar">
+      <div class="titlebar-title">
+        <svg viewBox="0 0 32 32" fill="none"><defs><linearGradient id="tb-grad" x1="0" y1="0" x2="32" y2="32"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#tb-grad)"/><path d="M7 12h8v2H9v3h5v2H9v5H7V12zm10 0h8v2h-6v2h5v2h-5v3h6v2h-8V12z" fill="white" fill-opacity="0.9"/></svg>
+        <span class="app-name">Cloud IDE</span>
+        <span id="titlebar-path" style="color:var(--text-muted)"></span>
+      </div>
+      <div class="titlebar-actions">
+        <button class="titlebar-btn" id="btn-fullscreen" title="Toggle Fullscreen">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14" id="fullscreen-icon"><path d="M1.5 1a.5.5 0 00-.5.5v4a.5.5 0 001 0V2h3.5a.5.5 0 000-1h-4zm13 0h-4a.5.5 0 000 1H14v3.5a.5.5 0 001 0v-4a.5.5 0 00-.5-.5zM1 10.5a.5.5 0 011 0V14h3.5a.5.5 0 010 1h-4a.5.5 0 01-.5-.5v-4zm14 0a.5.5 0 00-1 0V14h-3.5a.5.5 0 000 1h4a.5.5 0 00.5-.5v-4z"/></svg>
+        </button>
+        <button class="titlebar-btn" id="btn-disconnect" title="Disconnect">Disconnect</button>
+      </div>
+    </div>
+
+    <div class="main-layout">
+      <!-- Activity Bar -->
+      <div class="activity-bar">
+        <button class="activity-btn active" data-panel="explorer" title="Explorer (Ctrl+Shift+E)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="search" title="Search (Ctrl+Shift+F)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="devops" title="DevOps Tools">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 10l2 2 4-4"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="git" title="Git">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 009 9"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="docker" title="Docker">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2"/><path d="M6 11h4v4H6z"/><path d="M14 11h4v4h-4z"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="k8s" title="Kubernetes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v7L12 22l-8-8.5v-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="helm" title="Helm Charts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="templates" title="Templates">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="nginx" title="Nginx">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 4v16"/><path d="M8 4l8 16"/><path d="M16 4v16"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="certs" title="Certificates">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="admin" title="Linux Admin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M6 8l2 2-2 2"/><path d="M12 12h4"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="logs" title="Log Viewer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h2"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="network" title="Network Tools">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="cicd" title="CI/CD & Ansible">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/><circle cx="12" cy="12" r="4"/></svg>
+        </button>
+        <button class="activity-btn" data-panel="kyma" title="Kyma Dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </button>
+        <div class="activity-spacer"></div>
+        <button class="activity-btn" data-panel="settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+      </div>
+
+      <!-- Sidebar (File Explorer) -->
+      <div class="sidebar" id="sidebar">
+        <!-- Explorer Panel -->
+        <div class="sidebar-panel active" id="panel-explorer">
+          <div class="sidebar-header">
+            <span>Explorer</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="btn-new-file" title="New File">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 1.1L3.1 1C2.5 1 2 1.5 2 2.1v11.8c0 .6.5 1.1 1.1 1.1h9.8c.6 0 1.1-.5 1.1-1.1V5.6L9.5 1.1zM13 13.9H3V2.1h5.5v3.6c0 .3.2.5.5.5h4V13.9zM8.5 5.8V1.9L12.4 5.8H8.5z"/><path d="M7.25 8v2.25H5v1.5h2.25V14h1.5v-2.25H11v-1.5H8.75V8h-1.5z"/></svg>
+              </button>
+              <button class="sidebar-action-btn" id="btn-new-folder" title="New Folder">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M14 4H8.382l-.723-1.447A1 1 0 006.764 2H2a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1V5a1 1 0 00-1-1zm0 9H2V3h4.764l1 2H14v8z"/><path d="M7.25 7v2.25H5v1.5h2.25V13h1.5v-2.25H11v-1.5H8.75V7h-1.5z"/></svg>
+              </button>
+              <button class="sidebar-action-btn" id="btn-refresh-tree" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.451 5.609l-.579-.921-1.843 1.153.579.921 1.843-1.153zm-1.654 5.932l.804.86 1.404-1.312-.804-.86-1.404 1.312zM6.5 13h1V1.5h-1V13zM2.545 9.688l1.843 1.153.579-.921-1.843-1.153-.579.921zm1.843-5.279l-1.843 1.153.579.921 1.843-1.153-.579-.921z"/><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+              <button class="sidebar-action-btn" id="btn-toggle-hidden" title="Toggle Hidden Files">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 3C4.5 3 1.6 5.1.5 8c1.1 2.9 4 5 7.5 5s6.4-2.1 7.5-5c-1.1-2.9-4-5-7.5-5zm0 8.3c-1.8 0-3.3-1.5-3.3-3.3S6.2 4.7 8 4.7s3.3 1.5 3.3 3.3-1.5 3.3-3.3 3.3zM8 6a2 2 0 100 4 2 2 0 000-4z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="file-tree" id="file-tree"></div>
+        </div>
+
+        <!-- Search Panel -->
+        <div class="sidebar-panel" id="panel-search">
+          <div class="sidebar-header"><span>Search</span></div>
+          <div class="search-panel" style="display:flex;">
+            <div class="search-input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="text" id="search-input" placeholder="Search files..." spellcheck="false">
+            </div>
+            <div class="search-options">
+              <button class="search-option-btn" id="search-case" title="Match Case">Aa</button>
+              <button class="search-option-btn" id="search-regex" title="Use Regex">.*</button>
+              <button class="search-option-btn" id="search-word" title="Whole Word">ab</button>
+            </div>
+            <div class="search-results" id="search-results">
+              <div style="padding:8px;color:var(--text-muted);font-size:12px;">Type to search across files</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="sidebar-panel" id="panel-settings">
+          <div class="sidebar-header"><span>Settings</span></div>
+          <div class="settings-panel" style="display:flex;">
+            <div class="settings-group">
+              <div class="settings-group-title">Editor</div>
+              <div class="settings-item">
+                <span class="settings-label">Font Size</span>
+                <div class="settings-control"><input type="range" id="setting-font-size" min="10" max="24" value="14"></div>
+              </div>
+              <div class="settings-item">
+                <span class="settings-label">Tab Size</span>
+                <div class="settings-control">
+                  <select id="setting-tab-size"><option value="2">2</option><option value="4">4</option><option value="8">8</option></select>
+                </div>
+              </div>
+              <div class="settings-item">
+                <span class="settings-label">Word Wrap</span>
+                <div class="settings-control"><div class="settings-toggle" id="setting-word-wrap"></div></div>
+              </div>
+              <div class="settings-item">
+                <span class="settings-label">Minimap</span>
+                <div class="settings-control"><div class="settings-toggle active" id="setting-minimap"></div></div>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-title">Terminal</div>
+              <div class="settings-item">
+                <span class="settings-label">Font Size</span>
+                <div class="settings-control"><input type="range" id="setting-term-font-size" min="10" max="24" value="14"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DevOps Tools Panel -->
+        <div class="sidebar-panel" id="panel-devops">
+          <div class="sidebar-header">
+            <span>DevOps Tools</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="devops-refresh" title="Detect OS & Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.451 5.609l-.579-.921-1.843 1.153.579.921 1.843-1.153zm-1.654 5.932l.804.86 1.404-1.312-.804-.86-1.404 1.312zM6.5 13h1V1.5h-1V13zM2.545 9.688l1.843 1.153.579-.921-1.843-1.153-.579.921zm1.843-5.279l-1.843 1.153.579.921 1.843-1.153-.579-.921z"/><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel">
+            <div class="devops-status" id="devops-status">
+              <span class="devops-status-text">Click refresh to detect remote OS</span>
+            </div>
+            <div class="devops-cards" id="devops-cards"></div>
+            <div class="devops-install-all-wrap">
+              <button class="devops-install-all-btn" id="devops-install-all">Install All Missing Tools</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Git Panel -->
+        <div class="sidebar-panel" id="panel-git">
+          <div class="sidebar-header">
+            <span>Source Control</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="git-refresh" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.451 5.609l-.579-.921-1.843 1.153.579.921 1.843-1.153zm-1.654 5.932l.804.86 1.404-1.312-.804-.86-1.404 1.312zM6.5 13h1V1.5h-1V13zM2.545 9.688l1.843 1.153.579-.921-1.843-1.153-.579.921zm1.843-5.279l-1.843 1.153.579.921 1.843-1.153-.579-.921z"/><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel" id="git-content">
+            <div class="devops-status"><span class="devops-status-text">Click refresh to load git status</span></div>
+          </div>
+        </div>
+
+        <!-- Docker Panel -->
+        <div class="sidebar-panel" id="panel-docker">
+          <div class="sidebar-header">
+            <span>Docker</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="docker-refresh" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.451 5.609l-.579-.921-1.843 1.153.579.921 1.843-1.153zm-1.654 5.932l.804.86 1.404-1.312-.804-.86-1.404 1.312zM6.5 13h1V1.5h-1V13zM2.545 9.688l1.843 1.153.579-.921-1.843-1.153-.579.921zm1.843-5.279l-1.843 1.153.579.921 1.843-1.153-.579-.921z"/><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel" id="docker-content">
+            <div class="devops-status"><span class="devops-status-text">Click refresh to load containers</span></div>
+          </div>
+        </div>
+
+        <!-- K8s Panel -->
+        <div class="sidebar-panel" id="panel-k8s">
+          <div class="sidebar-header">
+            <span>Kubernetes</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="k8s-refresh" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.451 5.609l-.579-.921-1.843 1.153.579.921 1.843-1.153zm-1.654 5.932l.804.86 1.404-1.312-.804-.86-1.404 1.312zM6.5 13h1V1.5h-1V13zM2.545 9.688l1.843 1.153.579-.921-1.843-1.153-.579.921zm1.843-5.279l-1.843 1.153.579.921 1.843-1.153-.579-.921z"/><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel" id="k8s-content">
+            <div class="devops-status"><span class="devops-status-text">Click refresh to load cluster</span></div>
+          </div>
+        </div>
+
+        <!-- Helm Panel -->
+        <div class="sidebar-panel" id="panel-helm">
+          <div class="sidebar-header">
+            <span>Helm Charts</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="helm-refresh" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel" id="helm-content">
+            <div class="devops-status"><span class="devops-status-text">Click refresh to load Helm releases</span></div>
+          </div>
+        </div>
+
+        <!-- Templates Panel -->
+        <div class="sidebar-panel" id="panel-templates">
+          <div class="sidebar-header">
+            <span>Templates</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="templates-refresh" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel" id="templates-content" style="overflow-y:auto"></div>
+        </div>
+
+        <!-- Nginx Panel -->
+        <div class="sidebar-panel" id="panel-nginx">
+          <div class="sidebar-header">
+            <span>Nginx</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="nginx-refresh" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel" id="nginx-content" style="overflow-y:auto">
+            <div class="devops-status"><span class="devops-status-text">Click refresh to load nginx config</span></div>
+          </div>
+        </div>
+
+        <!-- Certificates Panel -->
+        <div class="sidebar-panel" id="panel-certs">
+          <div class="sidebar-header">
+            <span>Certificates</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action-btn" id="certs-refresh" title="Refresh">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="devops-panel" id="certs-content" style="overflow-y:auto">
+            <div class="devops-status"><span class="devops-status-text">Click refresh to load certificates</span></div>
+          </div>
+        </div>
+
+        <!-- Linux Admin Panel -->
+        <div class="sidebar-panel" id="panel-admin">
+          <div class="sidebar-header"><span>Linux Admin</span><div class="sidebar-actions"><button class="sidebar-action-btn" id="admin-refresh" title="Refresh"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg></button></div></div>
+          <div class="devops-panel" id="admin-content" style="overflow-y:auto"><div class="devops-status"><span class="devops-status-text">Click refresh to load system info</span></div></div>
+        </div>
+
+        <!-- Log Viewer Panel -->
+        <div class="sidebar-panel" id="panel-logs">
+          <div class="sidebar-header"><span>Log Viewer</span><div class="sidebar-actions"><button class="sidebar-action-btn" id="logs-refresh" title="Refresh"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg></button></div></div>
+          <div class="devops-panel" id="logs-content" style="overflow-y:auto"><div class="devops-status"><span class="devops-status-text">Click refresh to load log sources</span></div></div>
+        </div>
+
+        <!-- Network Tools Panel -->
+        <div class="sidebar-panel" id="panel-network">
+          <div class="sidebar-header"><span>Network Tools</span><div class="sidebar-actions"><button class="sidebar-action-btn" id="network-refresh" title="Refresh"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg></button></div></div>
+          <div class="devops-panel" id="network-content" style="overflow-y:auto"><div class="devops-status"><span class="devops-status-text">Click refresh to load network info</span></div></div>
+        </div>
+
+        <!-- CI/CD Panel -->
+        <div class="sidebar-panel" id="panel-cicd">
+          <div class="sidebar-header"><span>CI/CD & Ansible</span><div class="sidebar-actions"><button class="sidebar-action-btn" id="cicd-refresh" title="Refresh"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg></button></div></div>
+          <div class="devops-panel" id="cicd-content" style="overflow-y:auto"><div class="devops-status"><span class="devops-status-text">Click refresh to load CI/CD status</span></div></div>
+        </div>
+
+        <!-- Kyma Dashboard Panel -->
+        <div class="sidebar-panel" id="panel-kyma">
+          <div class="sidebar-header"><span>Kyma Dashboard</span><div class="sidebar-actions"><button class="sidebar-action-btn" id="kyma-console-refresh" title="Console Refresh"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10 5 5 0 000 10zm0-1a4 4 0 110-8 4 4 0 010 8z"/></svg></button><button class="sidebar-action-btn" id="kyma-refresh" title="Dashboard Refresh"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.451 5.609l-.579-.921-1.843 1.153.579.921 1.843-1.153zm-1.654 5.932l.804.86 1.404-1.312-.804-.86-1.404 1.312zM6.5 13h1V1.5h-1V13z"/></svg></button><button class="sidebar-action-btn" id="kyma-open-external" title="Open External"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M16 .5a.5.5 0 00-.5-.5h-5a.5.5 0 000 1h3.793L6.146 9.146a.5.5 0 10.708.708L15 1.707V5.5a.5.5 0 001 0v-5z"/></svg></button></div></div>
+          <div class="devops-panel" id="kyma-content" style="overflow-y:auto;flex:1"><div class="devops-status"><span class="devops-status-text">Click refresh to load Kyma Dashboard</span></div></div>
+          <div class="devops-panel" id="kyma-console-content" style="overflow-y:auto;flex:1;display:none"></div>
+        </div>
+      </div>
+
+      <!-- Sidebar Resize Handle -->
+      <div class="split-handle-h" id="sidebar-handle"></div>
+
+      <!-- Content Area -->
+      <div class="content-area">
+        <!-- Editor Tabs -->
+        <div class="tabs-bar" id="tabs-bar"></div>
+        <!-- Breadcrumbs -->
+        <div class="breadcrumb-bar" id="breadcrumb-bar"></div>
+
+        <!-- Editor + Terminal Split -->
+        <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+          <!-- Editor -->
+          <div class="editor-container" id="editor-container">
+            <div class="editor-welcome" id="editor-welcome">
+              <svg viewBox="0 0 32 32" fill="currentColor" opacity="0.1"><defs><linearGradient id="w-grad" x1="0" y1="0" x2="32" y2="32"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#w-grad)"/><path d="M7 12h8v2H9v3h5v2H9v5H7V12zm10 0h8v2h-6v2h5v2h-5v3h6v2h-8V12z" fill="white"/></svg>
+              <div class="editor-welcome-text">Open a file from the explorer to start editing</div>
+              <div class="editor-welcome-shortcuts">
+                <span class="editor-welcome-key">Ctrl+S</span><span class="editor-welcome-desc">Save file</span>
+                <span class="editor-welcome-key">Ctrl+P</span><span class="editor-welcome-desc">Quick open</span>
+                <span class="editor-welcome-key">Ctrl+`</span><span class="editor-welcome-desc">Toggle terminal</span>
+                <span class="editor-welcome-key">Ctrl+Shift+E</span><span class="editor-welcome-desc">Explorer</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Terminal Split Handle -->
+          <div class="split-handle-v" id="terminal-handle"></div>
+
+          <!-- Terminal Panel -->
+          <div class="panel-area" id="panel-area" style="height:250px;">
+            <div class="panel-tabs">
+              <div class="terminal-tabs-list" id="terminal-tabs">
+                <span class="panel-tab active">Terminal</span>
+              </div>
+              <div class="panel-actions">
+                <button class="panel-action-btn" id="btn-new-terminal" title="New Terminal">
+                  <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 01.5.5V7h5.5a.5.5 0 010 1H8.5v5.5a.5.5 0 01-1 0V8H2a.5.5 0 010-1h5.5V1.5A.5.5 0 018 1z"/></svg>
+                </button>
+                <button class="panel-action-btn" id="btn-maximize-terminal" title="Maximize Panel">
+                  <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 3v10h10V3H3zm9 9H4V4h8v8z"/></svg>
+                </button>
+                <button class="panel-action-btn" id="btn-close-panel" title="Close Panel">
+                  <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708L8 8.707z"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="terminal-container" id="terminal-container"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="statusbar">
+      <div class="statusbar-section" id="status-connection">
+        <svg viewBox="0 0 16 16" fill="currentColor" class="connected"><circle cx="8" cy="8" r="4"/></svg>
+        <span id="status-host">Connected</span>
+      </div>
+      <div class="statusbar-section" id="status-branch">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25z"/></svg>
+        <span>main</span>
+      </div>
+      <div class="statusbar-spacer"></div>
+      <div class="statusbar-section" id="status-cursor">
+        <span>Ln 1, Col 1</span>
+      </div>
+      <div class="statusbar-section" id="status-language">
+        <span>Plain Text</span>
+      </div>
+      <div class="statusbar-section" id="status-encoding">
+        <span>UTF-8</span>
+      </div>
+      <div class="statusbar-section statusbar-notifications" id="status-notifications" title="Notifications">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 16a2 2 0 002-2H6a2 2 0 002 2zm.995-14.901a1 1 0 10-1.99 0A5 5 0 003 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.901z"/></svg>
+        <span class="notification-badge" id="notification-badge" style="display:none">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Context Menu -->
+  <div class="context-menu" id="context-menu">
+    <div class="context-menu-item" data-action="new-file">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 1.1L3.1 1C2.5 1 2 1.5 2 2.1v11.8c0 .6.5 1.1 1.1 1.1h9.8c.6 0 1.1-.5 1.1-1.1V5.6L9.5 1.1z"/></svg>
+      New File
+      <span class="context-menu-shortcut"></span>
+    </div>
+    <div class="context-menu-item" data-action="new-folder">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M14 4H8.382l-.723-1.447A1 1 0 006.764 2H2a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1V5a1 1 0 00-1-1z"/></svg>
+      New Folder
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="rename">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5l.5-.5h4l.5.5v2.1l3.72-2.9.78.5v4.6l-.78.5L6 4.9v2.6l-.5.5h-4L1 7.5v-4z"/></svg>
+      Rename
+      <span class="context-menu-shortcut">F2</span>
+    </div>
+    <div class="context-menu-item" data-action="delete">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z"/><path d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 110-2h3a1 1 0 011-1h3a1 1 0 011 1h3a1 1 0 011 1z"/></svg>
+      Delete
+      <span class="context-menu-shortcut">Del</span>
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="copy-path">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 00-2 2V14a2 2 0 002 2h10a2 2 0 002-2V3.5a2 2 0 00-2-2h-1v1h1a1 1 0 011 1V14a1 1 0 01-1 1H3a1 1 0 01-1-1V3.5a1 1 0 011-1h1v-1z"/><path d="M9.5 1a.5.5 0 01.5.5v1a.5.5 0 01-.5.5h-3a.5.5 0 01-.5-.5v-1a.5.5 0 01.5-.5h3z"/></svg>
+      Copy Path
+    </div>
+    <div class="context-menu-item" data-action="download">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 13h9a.5.5 0 000-1h-9a.5.5 0 000 1zM8 10a.5.5 0 00.354-.146l2.5-2.5a.5.5 0 10-.708-.708L8.5 8.293V1.5a.5.5 0 00-1 0v6.793L5.854 6.646a.5.5 0 10-.708.708l2.5 2.5A.5.5 0 008 10z"/></svg>
+      Download
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-search@0.13.0/lib/xterm-addon-search.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-unicode11@0.6.0/lib/xterm-addon-unicode11.min.js"></script>
+
+  <script>
+    var require = { paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs' } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js"></script>
+
+  <script src="js/connection.js"></script>
+  <script src="js/fileExplorer.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/terminal.js"></script>
+  <script src="js/splitPane.js"></script>
+  <script src="js/features.js"></script>
+  <script src="js/devopsPanel.js"></script>
+  <script src="js/gitPanel.js"></script>
+  <script src="js/dockerPanel.js"></script>
+  <script src="js/k8sPanel.js"></script>
+  <script src="js/commandPalette.js"></script>
+  <script src="js/templatesPanel.js"></script>
+  <script src="js/helmPanel.js"></script>
+  <script src="js/nginxPanel.js"></script>
+  <script src="js/certPanel.js"></script>
+  <script src="js/kymaPanel.js"></script>
+  <script src="js/kymaConsole.js"></script>
+  <script src="js/linuxAdminPanel.js"></script>
+  <script src="js/adminPanels.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+- generic [ref=e20]:
+  - generic [ref=e21]:
+    - generic [ref=e22]:
+      - img [ref=e23]
+      - generic [ref=e26]: CloudIDE
+    - paragraph [ref=e27]: Select a workspace to get started
+  - generic [ref=e28]:
+    - generic [ref=e29] [cursor=pointer]:
+      - generic [ref=e30]: 🖥️
+      - generic [ref=e31]:
+        - generic [ref=e32]: SSH Connect
+        - generic [ref=e33]: Connect to a remote server via SSH with full IDE, terminal, and file explorer
+    - generic [ref=e34] [cursor=pointer]:
+      - generic [ref=e35]: ☸️
+      - generic [ref=e36]:
+        - generic [ref=e37]: Kubernetes Dashboard
+        - generic [ref=e38]: Manage clusters, pods, services, Helm charts, and deploy templates
+    - generic [ref=e39] [cursor=pointer]:
+      - generic [ref=e40]: 🚀
+      - generic [ref=e41]:
+        - generic [ref=e42]: DevOps Templates
+        - generic [ref=e43]: "30 ready-to-deploy templates: databases, CNCF stacks, hello world apps"
+    - generic [ref=e44] [cursor=pointer]:
+      - generic [ref=e45]: ⚡
+      - generic [ref=e46]:
+        - generic [ref=e47]: Srinivas App
+        - generic [ref=e48]: Full-stack application with frontend, backend, and Docker deployment
+  - generic [ref=e49]:
+    - text: Logged in as
+    - strong [ref=e50]: admin
+    - text: •
+    - link "Sign out" [ref=e51] [cursor=pointer]:
+      - /url: "#"

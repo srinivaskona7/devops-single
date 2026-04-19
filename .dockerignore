@@ -1,0 +1,17 @@
+node_modules
+proxy/node_modules
+.git
+.github
+*.md
+*.png
+*.jpg
+*.gif
+*.ico
+.DS_Store
+.dockerignore
+Dockerfile
+docker-compose.yml
+deploy-ec2.sh
+.claude
+.playwright-mcp
+*.output

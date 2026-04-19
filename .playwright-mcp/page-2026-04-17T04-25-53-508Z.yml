@@ -1,0 +1,64 @@
+- generic [ref=e58]:
+  - generic [ref=e59]:
+    - generic [ref=e60]:
+      - img [ref=e61]
+      - generic [ref=e64]: Cloud IDE
+      - generic [ref=e65]: — root@65.0.184.134
+    - button "Disconnect" [ref=e67] [cursor=pointer]
+  - generic [ref=e68]:
+    - generic [ref=e69]:
+      - button "Explorer (Ctrl+Shift+E)" [ref=e70] [cursor=pointer]:
+        - img [ref=e71]
+      - button "Search (Ctrl+Shift+F)" [active] [ref=e73] [cursor=pointer]:
+        - img [ref=e74]
+      - button "Settings" [ref=e77] [cursor=pointer]:
+        - img [ref=e78]
+    - generic [ref=e81]:
+      - generic [ref=e82]:
+        - generic [ref=e83]: Explorer
+        - generic [ref=e84]:
+          - button "New File" [ref=e85] [cursor=pointer]:
+            - img [ref=e86]
+          - button "New Folder" [ref=e89] [cursor=pointer]:
+            - img [ref=e90]
+          - button "Refresh" [ref=e93] [cursor=pointer]:
+            - img [ref=e94]
+          - button "Toggle Hidden Files" [ref=e97] [cursor=pointer]:
+            - img [ref=e98]
+      - generic [ref=e101] [cursor=pointer]: "Error: Not connected"
+    - generic [ref=e105]:
+      - generic [ref=e107]:
+        - img [ref=e108]
+        - generic [ref=e111]: Open a file from the explorer to start editing
+        - generic [ref=e112]:
+          - generic [ref=e113]: Ctrl+S
+          - generic [ref=e114]: Save file
+          - generic [ref=e115]: Ctrl+P
+          - generic [ref=e116]: Quick open
+          - generic [ref=e117]: "Ctrl+`"
+          - generic [ref=e118]: Toggle terminal
+          - generic [ref=e119]: Ctrl+Shift+E
+          - generic [ref=e120]: Explorer
+      - generic [ref=e122]:
+        - generic [ref=e123]:
+          - generic [ref=e124] [cursor=pointer]: Terminal
+          - generic [ref=e125]:
+            - button "New Terminal" [ref=e126] [cursor=pointer]:
+              - img [ref=e127]
+            - button "Maximize Panel" [ref=e129] [cursor=pointer]:
+              - img [ref=e130]
+            - button "Close Panel" [ref=e132] [cursor=pointer]:
+              - img [ref=e133]
+        - generic [ref=e138]:
+          - generic:
+            - textbox "Terminal input"
+  - generic [ref=e149]:
+    - generic [ref=e150]:
+      - img [ref=e151]
+      - generic [ref=e153]: root@65.0.184.134
+    - generic [ref=e154]:
+      - img [ref=e155]
+      - generic [ref=e157]: main
+    - generic [ref=e159]: Ln 1, Col 1
+    - generic [ref=e161]: Plain Text
+    - generic [ref=e163]: UTF-8

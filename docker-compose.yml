@@ -1,0 +1,115 @@
+version: "3.8"
+
+services:
+  cloud-ide:
+    image: sriniv7654/devops-single:cloud-ide-${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloud-ide
+    ports:
+      - "${PORT:-3456}:3456"
+    environment:
+      - PORT=3456
+      - NODE_ENV=production
+      - UV_THREADPOOL_SIZE=16
+    volumes:
+      - ide-config:/app/data
+      - ide-templates:/app/templates
+      - ${KUBECONFIG_PATH:-~/.kube}:/app/.kube:ro
+    restart: unless-stopped
+    stop_grace_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3456/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  kyma-backend:
+    image: sriniv7654/devops-single:kyma-backend-${IMAGE_TAG:-latest}
+    container_name: kyma-manager-backend
+    ports:
+      - "8100:8100"
+    environment:
+      - NODE_ENV=production
+      - PORT=8100
+      - DEV_SKIP_AUTH=true
+      - SESSION_SECRET=${SESSION_SECRET:-cloud-ide-kyma-session-secret-32ch!!}
+      - KUBECONFIG=/kubeconfig/config.yaml
+    volumes:
+      - ${KUBECONFIG_PATH:-~/.kube/config}:/kubeconfig/config.yaml:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8100/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  kyma-frontend:
+    image: sriniv7654/devops-single:kyma-frontend-${IMAGE_TAG:-latest}
+    container_name: kyma-manager-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - BACKEND_URL=kyma-manager-backend:8100
+    depends_on:
+      kyma-backend:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  ide-config:
+    driver: local
+  ide-templates:
+    driver: local

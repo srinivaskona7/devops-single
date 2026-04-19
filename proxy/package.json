@@ -1,0 +1,13 @@
+{
+  "name": "cloud-ide-proxy",
+  "version": "2.0.0",
+  "description": "Production WebSocket-to-SSH proxy for Cloud IDE",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ssh2": "^1.17.0",
+    "ws": "^8.20.0"
+  }
+}
