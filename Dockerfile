@@ -1,8 +1,8 @@
 # ─── Stage 1: Install dependencies ───────────────────────
 FROM node:20-alpine AS deps
 WORKDIR /deps
-COPY proxy/package.json proxy/package-lock.json* ./
-RUN npm ci --production --ignore-scripts \
+COPY proxy/package.json ./
+RUN npm install --omit=dev --registry https://registry.npmjs.org \
     && npm cache clean --force \
     && rm -rf /root/.npm /tmp/*
 

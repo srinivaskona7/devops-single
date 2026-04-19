@@ -1,5 +1,6 @@
 node_modules
 proxy/node_modules
+proxy/package-lock.json
 .git
 .github
 *.md
@@ -12,6 +13,9 @@ proxy/node_modules
 Dockerfile
 docker-compose.yml
 deploy-ec2.sh
+install.sh
+build-push.sh
 .claude
 .playwright-mcp
 *.output
+.npmrc
