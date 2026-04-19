@@ -239,26 +239,59 @@ deploy_ide() {
   cd "${INSTALL_DIR}"
   info "Working directory: $(pwd)"
 
-  info "Pulling images..."
-  docker pull "${REPO}:cloud-ide-${TAG}" 2>/dev/null || docker pull "${REPO}:cloud-ide" 2>/dev/null || {
-    if [ -f Dockerfile ]; then
-      info "Building from source..."
-      docker build -t "${REPO}:cloud-ide-${TAG}" .
+  # Build cloud-ide from source
+  if [ -f Dockerfile ]; then
+    info "Building Cloud IDE image..."
+    docker build -t "${REPO}:cloud-ide-${TAG}" -t "${REPO}:cloud-ide" .
+
+    # Push if logged in
+    if docker info 2>/dev/null | grep -q "Username"; then
+      info "Pushing cloud-ide image to Docker Hub..."
+      docker push "${REPO}:cloud-ide-${TAG}" 2>/dev/null && docker push "${REPO}:cloud-ide" 2>/dev/null && log "Pushed ${REPO}:cloud-ide-${TAG}" || warn "Push failed (login may be needed)"
     fi
-  }
-  docker pull "${REPO}:kyma-backend-${TAG}" 2>/dev/null || docker pull "${REPO}:kyma-backend" 2>/dev/null || true
-  docker pull "${REPO}:kyma-frontend-${TAG}" 2>/dev/null || docker pull "${REPO}:kyma-frontend" 2>/dev/null || true
+  fi
+
+  # Try pulling kyma images — if not available, skip (IDE works standalone)
+  KYMA_AVAILABLE=false
+  if docker pull "${REPO}:kyma-backend-${TAG}" 2>/dev/null || docker pull "${REPO}:kyma-backend" 2>/dev/null; then
+    if docker pull "${REPO}:kyma-frontend-${TAG}" 2>/dev/null || docker pull "${REPO}:kyma-frontend" 2>/dev/null; then
+      KYMA_AVAILABLE=true
+    fi
+  fi
+
+  # Try pulling from original repos if single repo doesn't have them
+  if [ "$KYMA_AVAILABLE" = false ]; then
+    info "Kyma images not in single repo — trying original repos..."
+    if docker pull sriniv7654/kyma-dashboard-backend:latest 2>/dev/null; then
+      docker tag sriniv7654/kyma-dashboard-backend:latest "${REPO}:kyma-backend-${TAG}"
+      docker tag sriniv7654/kyma-dashboard-backend:latest "${REPO}:kyma-backend"
+      if docker pull sriniv7654/kyma-dashboard-frontend:latest 2>/dev/null; then
+        docker tag sriniv7654/kyma-dashboard-frontend:latest "${REPO}:kyma-frontend-${TAG}"
+        docker tag sriniv7654/kyma-dashboard-frontend:latest "${REPO}:kyma-frontend"
+        KYMA_AVAILABLE=true
+      fi
+    fi
+  fi
 
   # Stop existing
   docker compose down 2>/dev/null || true
   docker stop cloud-ide kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
   docker rm cloud-ide kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
 
-  # Start
-  if [ -f docker-compose.yml ]; then
+  # Start — IDE only if kyma images unavailable
+  if [ "$KYMA_AVAILABLE" = true ] && [ -f docker-compose.yml ]; then
+    info "Starting full stack (IDE + Kyma Dashboard)..."
     IMAGE_TAG="${TAG}" KUBECONFIG_PATH="${KUBECONFIG_PATH:-$HOME/.kube/config}" docker compose up -d
   else
-    docker run -d --name cloud-ide -p "${PORT}:3456" --restart unless-stopped "${REPO}:cloud-ide-${TAG}"
+    if [ "$KYMA_AVAILABLE" = false ]; then
+      warn "Kyma Dashboard images not available — starting IDE only"
+    fi
+    info "Starting Cloud IDE..."
+    docker run -d --name cloud-ide \
+      -p "${PORT}:3456" \
+      -v cloud-ide-data:/app/data \
+      --restart unless-stopped \
+      "${REPO}:cloud-ide-${TAG}"
   fi
 
   # Health check

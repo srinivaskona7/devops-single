@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   cloud-ide:
     image: sriniv7654/devops-single:cloud-ide-${IMAGE_TAG:-latest}
