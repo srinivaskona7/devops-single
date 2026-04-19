@@ -489,9 +489,9 @@ wss.on('connection', (ws) => {
   });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`☁️  Cloud IDE Proxy listening on ws://localhost:${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/health`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`Cloud IDE Proxy listening on http://0.0.0.0:${PORT}`);
+  console.log(`Health check: http://0.0.0.0:${PORT}/health`);
 });
 
 httpServer.on('error', (err) => {
