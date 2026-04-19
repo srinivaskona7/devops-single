@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile
     container_name: cloud-ide
     ports:
-      - "${PORT:-3456}:3456"
+      - "${PORT:-8101}:3456"
     environment:
       - PORT=3456
       - NODE_ENV=production
