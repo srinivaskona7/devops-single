@@ -17,11 +17,6 @@ services:
       - ${KUBECONFIG_PATH:-~/.kube}:/app/.kube:ro
     restart: unless-stopped
     stop_grace_period: 15s
-    read_only: true
-    tmpfs:
-      - /tmp:size=64M
-    security_opt:
-      - no-new-privileges:true
     deploy:
       resources:
         limits:
