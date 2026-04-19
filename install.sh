@@ -308,7 +308,12 @@ deploy_ide() {
 
 # ─── Print Summary ──────────────────────────────────────────
 print_summary() {
-  IP=$(curl -sf http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+  TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)
+  IP=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null \
+    || curl -sf http://checkip.amazonaws.com 2>/dev/null \
+    || curl -sf http://ifconfig.me 2>/dev/null \
+    || hostname -I 2>/dev/null | awk '{print $1}' \
+    || echo "localhost")
 
   echo ""
   echo -e "${BOLD}╔══════════════════════════════════════════════════╗${NC}"
