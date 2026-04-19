@@ -242,13 +242,7 @@ deploy_ide() {
   # Build cloud-ide from source
   if [ -f Dockerfile ]; then
     info "Building Cloud IDE image..."
-    docker build -t "${REPO}:cloud-ide-${TAG}" -t "${REPO}:cloud-ide" .
-
-    # Push if logged in
-    if docker info 2>/dev/null | grep -q "Username"; then
-      info "Pushing cloud-ide image to Docker Hub..."
-      docker push "${REPO}:cloud-ide-${TAG}" 2>/dev/null && docker push "${REPO}:cloud-ide" 2>/dev/null && log "Pushed ${REPO}:cloud-ide-${TAG}" || warn "Push failed (login may be needed)"
-    fi
+    docker build --no-cache -t "${REPO}:cloud-ide-${TAG}" -t "${REPO}:cloud-ide" .
   fi
 
   # Try pulling kyma images — if not available, skip (IDE works standalone)
