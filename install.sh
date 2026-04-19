@@ -9,7 +9,7 @@ set -e
 
 REPO="sriniv7654/devops-single"
 GIT_REPO="https://github.com/srinivaskona7/devops-single.git"
-INSTALL_DIR="${INSTALL_DIR:-/opt/cloud-ide}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/srintest}"
 PORT="${PORT:-3456}"
 TAG="${IMAGE_TAG:-latest}"
 
@@ -57,10 +57,20 @@ install_docker() {
       sudo apt-get update -qq
       sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       ;;
-    centos|rhel|amzn|fedora)
+    amzn)
+      sudo yum install -y docker
+      sudo systemctl enable docker && sudo systemctl start docker
+      sudo usermod -aG docker "$USER" 2>/dev/null || true
+      ;;
+    centos|rhel)
       sudo yum install -y yum-utils
       sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
       sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      ;;
+    fedora)
+      sudo dnf -y install dnf-plugins-core
+      sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+      sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       ;;
     alpine)
       sudo apk add --no-cache docker docker-cli-compose
@@ -85,11 +95,13 @@ install_compose() {
     return
   fi
   info "Installing Docker Compose..."
-  sudo mkdir -p /usr/local/lib/docker/cli-plugins
-  COMPOSE_ARCH=$(uname -m | sed 's/amd64/x86_64/;s/arm64/aarch64/')
+  sudo mkdir -p /usr/local/lib/docker/cli-plugins /usr/libexec/docker/cli-plugins
+  COMPOSE_ARCH=$(uname -m)
   sudo curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${COMPOSE_ARCH}" \
     -o /usr/local/lib/docker/cli-plugins/docker-compose
   sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  sudo cp /usr/local/lib/docker/cli-plugins/docker-compose /usr/libexec/docker/cli-plugins/docker-compose 2>/dev/null || true
+  sudo ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose 2>/dev/null || true
   log "Docker Compose installed"
 }
 
@@ -209,18 +221,20 @@ install_git() {
 # ─── Deploy Cloud IDE ───────────────────────────────────────
 deploy_ide() {
   info "Setting up Cloud IDE at ${INSTALL_DIR}..."
-  sudo mkdir -p "${INSTALL_DIR}"
-  cd "${INSTALL_DIR}"
+  mkdir -p "${INSTALL_DIR}" 2>/dev/null || sudo mkdir -p "${INSTALL_DIR}"
 
-  if [ -d ".git" ]; then
+  if [ -d "${INSTALL_DIR}/.git" ]; then
     info "Updating existing repo..."
-    git pull 2>/dev/null || true
+    cd "${INSTALL_DIR}" && git pull 2>/dev/null || true
   else
-    info "Cloning repo..."
-    sudo git clone "${GIT_REPO}" . 2>/dev/null || {
+    info "Cloning repo into ${INSTALL_DIR}..."
+    git clone "${GIT_REPO}" "${INSTALL_DIR}" 2>/dev/null || {
       warn "Clone failed — pulling images directly"
     }
   fi
+
+  cd "${INSTALL_DIR}"
+  info "Working directory: $(pwd)"
 
   info "Pulling images..."
   docker pull "${REPO}:cloud-ide-${TAG}" 2>/dev/null || docker pull "${REPO}:cloud-ide" 2>/dev/null || {
