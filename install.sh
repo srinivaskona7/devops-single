@@ -58,6 +58,7 @@ install_docker() {
       sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       ;;
     amzn)
+      sudo rm -f /etc/yum.repos.d/docker-ce.repo /etc/yum.repos.d/hashicorp.repo 2>/dev/null
       sudo yum install -y docker
       sudo systemctl enable docker && sudo systemctl start docker
       sudo usermod -aG docker "$USER" 2>/dev/null || true
@@ -187,16 +188,18 @@ install_terraform() {
       echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
       sudo apt-get update -qq && sudo apt-get install -y -qq terraform
       ;;
-    centos|rhel|amzn|fedora)
+    centos|rhel)
       sudo yum install -y yum-utils
       sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
       sudo yum -y install terraform
       ;;
     macos) brew install hashicorp/tap/terraform ;;
-    *)
-      TF_VER=$(curl -sL https://checkpoint-api.hashicorp.com/v1/check/terraform 2>/dev/null | grep -o '"current_version":"[^"]*"' | cut -d'"' -f4 || echo "1.9.0")
-      wget -qO /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TF_VER}/terraform_${TF_VER}_linux_${ARCH}.zip"
-      cd /tmp && unzip -qo tf.zip && sudo mv terraform /usr/local/bin/ && rm tf.zip
+    amzn|fedora|alpine|*)
+      sudo yum install -y unzip 2>/dev/null || sudo dnf install -y unzip 2>/dev/null || sudo apk add unzip 2>/dev/null || true
+      TF_VER=$(curl -sL https://checkpoint-api.hashicorp.com/v1/check/terraform 2>/dev/null | grep -o '"current_version":"[^"]*"' | cut -d'"' -f4)
+      [ -z "$TF_VER" ] && TF_VER="1.12.0"
+      curl -fsSL "https://releases.hashicorp.com/terraform/${TF_VER}/terraform_${TF_VER}_linux_${ARCH}.zip" -o /tmp/tf.zip
+      cd /tmp && unzip -qo tf.zip && sudo mv terraform /usr/local/bin/ && rm -f tf.zip
       ;;
   esac
   log "Terraform installed"
