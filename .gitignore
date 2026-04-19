@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+*.log
+.playwright-mcp/
+*.output
+*.png
+*.jpg
+/proxy/node_modules/
+/proxy/package-lock.json

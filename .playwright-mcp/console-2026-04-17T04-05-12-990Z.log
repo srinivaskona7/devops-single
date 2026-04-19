@@ -1,3 +1,0 @@
-[    8914ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://localhost:8090/:0
-[    8914ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://localhost:8090/:0
-[  212770ms] [ERROR] WebSocket connection to 'ws://localhost:3456/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:8090/js/connection.js:16

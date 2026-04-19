@@ -42,9 +42,27 @@ docker run -d -p 8100:8100 --name kyma-backend sriniv7654/devops-single:kyma-bac
 docker run -d -p 3000:80 --name kyma-frontend -e BACKEND_URL=kyma-backend:8100 sriniv7654/devops-single:kyma-frontend
 ```
 
-### Option 2: Docker Compose (Recommended)
+### Option 2: One-Line Install (installs ALL tools + IDE)
 ```bash
-git clone <repo> cloud-ide && cd cloud-ide
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash
+```
+
+This installs: Docker, Docker Compose, kubectl, Helm, jq, AWS CLI, Terraform, git — then deploys the IDE.
+
+```bash
+# Install tools only (no IDE)
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash -s -- --tools-only
+
+# Install IDE only (tools already installed)
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash -s -- --skip-tools
+
+# Specific version + custom port
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash -s -- --tag=v1 --port=8080
+```
+
+### Option 3: Docker Compose
+```bash
+git clone https://github.com/srinivaskona7/devops-single.git && cd devops-single
 
 # Start everything (IDE + Kyma Dashboard)
 docker compose up -d
