@@ -9,3 +9,4 @@ node_modules/
 /proxy/package-lock.json
 .npmrc
 proxy/.npmrc
+*.profraw

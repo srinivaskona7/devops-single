@@ -46,7 +46,7 @@ ENV PORT=3456 \
     STATIC_DIR=/app \
     NODE_ENV=production \
     UV_THREADPOOL_SIZE=16 \
-    NODE_OPTIONS="--max-old-space-size=256 --max-semi-space-size=32 --optimize-for-size"
+    NODE_OPTIONS="--max-old-space-size=256 --max-semi-space-size=32"
 
 EXPOSE 3456
 
