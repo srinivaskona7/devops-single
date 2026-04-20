@@ -789,6 +789,103 @@ post_install_cleanup() {
   log "Cleanup complete"
 }
 
+# ─── Full Build + Push + Deploy Pipeline ──────────────────
+full_build_push_deploy() {
+  echo -e "\n${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+  echo -e "${BOLD}║     Full Pipeline: Build → Push → Deploy          ║${NC}"
+  echo -e "${BOLD}╚══════════════════════════════════════════════════╝${NC}\n"
+
+  install_docker
+  install_git
+  install_nodejs
+
+  # Step 1: Clone/update repo
+  info "Step 1/5: Repository..."
+  if [ -d "${INSTALL_DIR}/.git" ]; then
+    cd "${INSTALL_DIR}" && git pull --ff-only 2>/dev/null || git pull
+    configured "Repository updated"
+  else
+    mkdir -p "$(dirname "${INSTALL_DIR}")" 2>/dev/null || true
+    git clone "https://github.com/srinivaskona7/devops-single.git" "${INSTALL_DIR}"
+    cd "${INSTALL_DIR}"
+    configured "Repository cloned"
+  fi
+  echo ""
+
+  # Step 2: Docker Hub login
+  info "Step 2/5: Docker Hub login (username: sriniv7654)..."
+  echo -e "  ${YELLOW}Enter Docker Hub password:${NC}"
+  docker login -u sriniv7654
+  echo ""
+
+  # Step 3: Build all images
+  info "Step 3/5: Building images..."
+  echo ""
+
+  info "  Building Cloud IDE..."
+  docker build --no-cache -t "${REPO}:cloud-ide-${TAG}" -t "${REPO}:cloud-ide" -f Dockerfile . 2>&1 | tail -3
+  configured "Cloud IDE image"
+
+  if [ -d "kyma-dashboard/backend" ]; then
+    cd kyma-dashboard
+    info "  Building Kyma Backend (DEV_SKIP_AUTH=true)..."
+    docker build --no-cache -t "${REPO}:kyma-backend-${TAG}" -t "${REPO}:kyma-backend" -f backend/Dockerfile . 2>&1 | tail -3
+    configured "Kyma Backend image"
+
+    info "  Building Kyma Frontend (VITE_SKIP_AUTH=true)..."
+    docker build --no-cache -t "${REPO}:kyma-frontend-${TAG}" -t "${REPO}:kyma-frontend" -f frontend/Dockerfile . 2>&1 | tail -3
+    configured "Kyma Frontend image"
+    cd ..
+  fi
+  echo ""
+
+  # Step 4: Push to Docker Hub
+  info "Step 4/5: Pushing to Docker Hub..."
+  docker push "${REPO}:cloud-ide-${TAG}"
+  docker push "${REPO}:cloud-ide"
+  configured "Pushed cloud-ide"
+
+  if docker image inspect "${REPO}:kyma-backend-${TAG}" &>/dev/null; then
+    docker push "${REPO}:kyma-backend-${TAG}"
+    docker push "${REPO}:kyma-backend"
+    configured "Pushed kyma-backend"
+    docker push "${REPO}:kyma-frontend-${TAG}"
+    docker push "${REPO}:kyma-frontend"
+    configured "Pushed kyma-frontend"
+  fi
+  echo ""
+
+  # Step 5: Deploy
+  info "Step 5/5: Deploying services..."
+  echo ""
+
+  # Deploy IDE natively
+  cd "${INSTALL_DIR}/proxy"
+  [ -d node_modules ] || npm install --omit=dev
+  if command -v systemctl &>/dev/null; then
+    create_systemd_service
+    sudo systemctl restart cloud-ide-proxy
+  else
+    stop_ide_service 2>/dev/null || true
+    PORT="${IDE_PORT}" STATIC_DIR="${INSTALL_DIR}" nohup node server.js > /var/log/cloud-ide-proxy.log 2>&1 &
+  fi
+  configured "Cloud IDE on port ${IDE_PORT}"
+
+  # Deploy Kyma containers (pull latest, fresh deploy)
+  docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  docker rm kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  cd "${INSTALL_DIR}"
+  deploy_kyma_docker
+
+  # Cleanup
+  docker image prune -f 2>/dev/null || true
+  docker builder prune -f 2>/dev/null || true
+
+  echo ""
+  show_status
+  log "Full pipeline complete: Build → Push → Deploy"
+}
+
 # ─── Menu System ───────────────────────────────────────────
 show_menu() {
   while true; do
@@ -811,17 +908,18 @@ show_menu() {
     echo -e "  ${BOLD} 3)${NC}  Install Kyma Dashboard only             ${KYMA_ICON}"
     echo -e "  ${BOLD} 4)${NC}  Install DevOps tools                 [${TOOLS_COUNT}/7]"
     echo -e "  ${BOLD} 5)${NC}  Build Kyma Dashboard from source"
-    echo -e "  ${BOLD} 6)${NC}  Start all services"
-    echo -e "  ${BOLD} 7)${NC}  Stop all services"
-    echo -e "  ${BOLD} 8)${NC}  Restart all services"
-    echo -e "  ${BOLD} 9)${NC}  Update to latest version"
-    echo -e "  ${BOLD}10)${NC}  View status"
-    echo -e "  ${BOLD}11)${NC}  View logs"
-    echo -e "  ${BOLD}12)${NC}  Cleanup (remove caches, dangling images)"
-    echo -e "  ${BOLD}13)${NC}  Uninstall"
+    echo -e "  ${BOLD} 6)${NC}  ${BOLD}Build + Push + Deploy (full pipeline)${NC}"
+    echo -e "  ${BOLD} 7)${NC}  Start all services"
+    echo -e "  ${BOLD} 8)${NC}  Stop all services"
+    echo -e "  ${BOLD} 9)${NC}  Restart all services"
+    echo -e "  ${BOLD}10)${NC}  Update to latest version"
+    echo -e "  ${BOLD}11)${NC}  View status"
+    echo -e "  ${BOLD}12)${NC}  View logs"
+    echo -e "  ${BOLD}13)${NC}  Cleanup (remove caches, dangling images)"
+    echo -e "  ${BOLD}14)${NC}  Uninstall"
     echo -e "  ${BOLD} 0)${NC}  Exit"
     echo ""
-    read -rp "  Select option [0-13]: " choice
+    read -rp "  Select option [0-14]: " choice
 
     case "$choice" in
       1)  install_tools; deploy_ide_native; deploy_kyma_docker; show_status ;;
@@ -829,14 +927,15 @@ show_menu() {
       3)  deploy_kyma_docker; show_status ;;
       4)  install_tools ;;
       5)  build_kyma_from_source ;;
-      6)  service_control start ;;
-      7)  service_control stop ;;
-      8)  service_control restart ;;
-      9)  update_all ;;
-      10) show_status ;;
-      11) view_logs ;;
-      12) post_install_cleanup ;;
-      13) uninstall ;;
+      6)  full_build_push_deploy ;;
+      7)  service_control start ;;
+      8)  service_control stop ;;
+      9)  service_control restart ;;
+      10) update_all ;;
+      11) show_status ;;
+      12) view_logs ;;
+      13) post_install_cleanup ;;
+      14) uninstall ;;
       0)  echo -e "\n  ${GREEN}Goodbye!${NC}\n"; exit 0 ;;
       *)  warn "Invalid option" ;;
     esac
