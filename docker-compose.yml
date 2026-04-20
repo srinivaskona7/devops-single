@@ -5,10 +5,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cloud-ide
-    ports:
-      - "${PORT:-8101}:3456"
+    network_mode: host
     environment:
-      - PORT=3456
+      - PORT=${PORT:-8101}
       - NODE_ENV=production
       - UV_THREADPOOL_SIZE=16
     volumes:
@@ -26,7 +25,7 @@ services:
           cpus: "0.25"
           memory: 128M
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3456/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-8101}/health"]
       interval: 15s
       timeout: 3s
       retries: 3
