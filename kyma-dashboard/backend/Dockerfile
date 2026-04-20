@@ -17,6 +17,7 @@ COPY frontend/package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm install --legacy-peer-deps
 COPY frontend/ ./
+ENV VITE_SKIP_AUTH=true
 RUN npm run build
 
 # ── Stage 3: Compile TypeScript (all deps needed for tsc) ────────────────────
@@ -70,6 +71,7 @@ USER app
 
 ENV NODE_ENV=production \
     PORT=8100 \
+    DEV_SKIP_AUTH=true \
     LOG_LEVEL=info
 
 EXPOSE 8100
