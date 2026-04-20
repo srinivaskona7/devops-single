@@ -2,31 +2,64 @@
 set -e
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  Cloud IDE — Universal Installer                            ║
+# ║  Cloud IDE — Interactive Installer & Manager                 ║
 # ║  curl -sSL https://raw.githubusercontent.com/               ║
-# ║    srinivaskona7/devops-single/main/install.sh | bash       ║
+# ║    srinivaskona7/devops-single/main/install.sh | bash        ║
+# ║  Interactive: ./install.sh                                   ║
 # ╚══════════════════════════════════════════════════════════════╝
 
+# ─── Constants ──────────────────────────────────────────────
 REPO="sriniv7654/devops-single"
 GIT_REPO="https://github.com/srinivaskona7/devops-single.git"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/srintest}"
-PORT="${PORT:-8101}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/cloud-ide}"
+IDE_PORT="${IDE_PORT:-8101}"
+KYMA_API_PORT="${KYMA_API_PORT:-8100}"
+KYMA_UI_PORT="${KYMA_UI_PORT:-3000}"
 TAG="${IMAGE_TAG:-latest}"
+SERVICE_NAME="cloud-ide-proxy"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
+# ─── Colors & Logging ──────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'; DIM='\033[2m'
 
-log()  { echo -e "${GREEN}[✓]${NC} $1"; }
-warn() { echo -e "${YELLOW}[!]${NC} $1"; }
-err()  { echo -e "${RED}[✗]${NC} $1"; }
-info() { echo -e "${CYAN}[→]${NC} $1"; }
+log()        { echo -e "${GREEN}[✓]${NC} $1"; }
+warn()       { echo -e "${YELLOW}[!]${NC} $1"; }
+err()        { echo -e "${RED}[✗]${NC} $1"; }
+info()       { echo -e "${CYAN}[→]${NC} $1"; }
+configured() { echo -e "${GREEN}  CONFIGURED:${NC} $1"; }
+no_change()  { echo -e "${DIM}  NO CHANGES:${NC} $1"; }
+destroyed()  { echo -e "${RED}  DESTROYED:${NC}  $1"; }
 
-echo ""
-echo -e "${BOLD}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║     Cloud IDE — DevOps Platform Installer        ║${NC}"
-echo -e "${BOLD}╚══════════════════════════════════════════════════╝${NC}"
-echo ""
+# ─── State Detection ───────────────────────────────────────
+state_check() {
+  HAS_DOCKER="no";    command -v docker &>/dev/null && HAS_DOCKER="yes"
+  HAS_COMPOSE="no";   docker compose version &>/dev/null 2>&1 && HAS_COMPOSE="yes"
+  HAS_KUBECTL="no";   command -v kubectl &>/dev/null && HAS_KUBECTL="yes"
+  HAS_HELM="no";      command -v helm &>/dev/null && HAS_HELM="yes"
+  HAS_JQ="no";        command -v jq &>/dev/null && HAS_JQ="yes"
+  HAS_AWS="no";       command -v aws &>/dev/null && HAS_AWS="yes"
+  HAS_TERRAFORM="no"; command -v terraform &>/dev/null && HAS_TERRAFORM="yes"
+  HAS_GIT="no";       command -v git &>/dev/null && HAS_GIT="yes"
+  HAS_NODE="no";      command -v node &>/dev/null && HAS_NODE="yes"
 
-# ─── Detect OS ──────────────────────────────────────────────
+  IDE_INSTALLED="no"
+  IDE_RUNNING="no"
+  [ -f "${INSTALL_DIR}/proxy/server.js" ] && IDE_INSTALLED="yes"
+  if systemctl is-active "${SERVICE_NAME}" &>/dev/null 2>&1; then
+    IDE_RUNNING="yes"
+  elif pgrep -f "node.*proxy/server.js" &>/dev/null; then
+    IDE_RUNNING="yes"
+  fi
+
+  KYMA_BACKEND_RUNNING="no"
+  KYMA_FRONTEND_RUNNING="no"
+  if [ "$HAS_DOCKER" = "yes" ]; then
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "kyma-manager-backend" && KYMA_BACKEND_RUNNING="yes" || true
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "kyma-manager-frontend" && KYMA_FRONTEND_RUNNING="yes" || true
+  fi
+}
+
+# ─── OS Detection ──────────────────────────────────────────
 detect_os() {
   if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -37,13 +70,28 @@ detect_os() {
     OS="unknown"
   fi
   ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-  info "Detected: ${OS} (${ARCH})"
 }
 
-# ─── Install Docker ─────────────────────────────────────────
+# ─── Tool Installers ───────────────────────────────────────
+
+install_git() {
+  if command -v git &>/dev/null; then
+    no_change "git $(git --version | awk '{print $3}')"
+    return
+  fi
+  info "Installing git..."
+  case $OS in
+    ubuntu|debian) sudo apt-get install -y -qq git ;;
+    centos|rhel|amzn|fedora) sudo yum install -y git ;;
+    alpine) sudo apk add --no-cache git ;;
+    macos) xcode-select --install 2>/dev/null || true ;;
+  esac
+  configured "git $(git --version 2>/dev/null | awk '{print $3}')"
+}
+
 install_docker() {
   if command -v docker &>/dev/null; then
-    log "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
+    no_change "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
     return
   fi
   info "Installing Docker..."
@@ -73,26 +121,21 @@ install_docker() {
       sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
       sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       ;;
-    alpine)
-      sudo apk add --no-cache docker docker-cli-compose
-      ;;
+    alpine) sudo apk add --no-cache docker docker-cli-compose ;;
     macos)
       brew install --cask docker
       warn "Open Docker Desktop to complete setup"
       ;;
-    *)
-      curl -fsSL https://get.docker.com | sh
-      ;;
+    *) curl -fsSL https://get.docker.com | sh ;;
   esac
   sudo systemctl enable docker 2>/dev/null && sudo systemctl start docker 2>/dev/null || true
   sudo usermod -aG docker "$USER" 2>/dev/null || true
-  log "Docker installed"
+  configured "Docker $(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')"
 }
 
-# ─── Install Docker Compose ─────────────────────────────────
 install_compose() {
   if docker compose version &>/dev/null; then
-    log "Docker Compose $(docker compose version --short 2>/dev/null)"
+    no_change "Docker Compose $(docker compose version --short 2>/dev/null)"
     return
   fi
   info "Installing Docker Compose..."
@@ -103,13 +146,12 @@ install_compose() {
   sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
   sudo cp /usr/local/lib/docker/cli-plugins/docker-compose /usr/libexec/docker/cli-plugins/docker-compose 2>/dev/null || true
   sudo ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose 2>/dev/null || true
-  log "Docker Compose installed"
+  configured "Docker Compose $(docker compose version --short 2>/dev/null)"
 }
 
-# ─── Install kubectl ────────────────────────────────────────
 install_kubectl() {
   if command -v kubectl &>/dev/null; then
-    log "kubectl $(kubectl version --client --short 2>/dev/null | head -1)"
+    no_change "kubectl $(kubectl version --client --short 2>/dev/null | head -1)"
     return
   fi
   info "Installing kubectl..."
@@ -122,13 +164,12 @@ install_kubectl() {
       rm -f kubectl
       ;;
   esac
-  log "kubectl ${KVER} installed"
+  configured "kubectl ${KVER}"
 }
 
-# ─── Install Helm ───────────────────────────────────────────
 install_helm() {
   if command -v helm &>/dev/null; then
-    log "Helm $(helm version --short 2>/dev/null)"
+    no_change "Helm $(helm version --short 2>/dev/null)"
     return
   fi
   info "Installing Helm..."
@@ -136,13 +177,12 @@ install_helm() {
     macos) brew install helm ;;
     *) curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash ;;
   esac
-  log "Helm installed"
+  configured "Helm $(helm version --short 2>/dev/null)"
 }
 
-# ─── Install jq ────────────────────────────────────────────
 install_jq() {
   if command -v jq &>/dev/null; then
-    log "jq $(jq --version 2>/dev/null)"
+    no_change "jq $(jq --version 2>/dev/null)"
     return
   fi
   info "Installing jq..."
@@ -153,13 +193,12 @@ install_jq() {
     macos) brew install jq ;;
     *) sudo apt-get install -y jq 2>/dev/null || sudo yum install -y jq 2>/dev/null ;;
   esac
-  log "jq installed"
+  configured "jq $(jq --version 2>/dev/null)"
 }
 
-# ─── Install AWS CLI ────────────────────────────────────────
 install_awscli() {
   if command -v aws &>/dev/null; then
-    log "AWS CLI $(aws --version 2>/dev/null | awk '{print $1}')"
+    no_change "AWS CLI $(aws --version 2>/dev/null | awk '{print $1}')"
     return
   fi
   info "Installing AWS CLI..."
@@ -172,13 +211,12 @@ install_awscli() {
       rm -rf /tmp/aws /tmp/awscliv2.zip
       ;;
   esac
-  log "AWS CLI installed"
+  configured "AWS CLI $(aws --version 2>/dev/null | awk '{print $1}')"
 }
 
-# ─── Install Terraform ──────────────────────────────────────
 install_terraform() {
   if command -v terraform &>/dev/null; then
-    log "Terraform $(terraform version 2>/dev/null | head -1)"
+    no_change "Terraform $(terraform version 2>/dev/null | head -1)"
     return
   fi
   info "Installing Terraform..."
@@ -202,206 +240,553 @@ install_terraform() {
       cd /tmp && unzip -qo tf.zip && sudo mv terraform /usr/local/bin/ && rm -f tf.zip
       ;;
   esac
-  log "Terraform installed"
+  configured "Terraform $(terraform version 2>/dev/null | head -1 | awk '{print $2}')"
 }
 
-# ─── Install Git ────────────────────────────────────────────
-install_git() {
-  if command -v git &>/dev/null; then
-    log "git $(git --version | awk '{print $3}')"
-    return
+install_tools() {
+  echo -e "\n${BOLD}  Installing DevOps tools...${NC}\n"
+  install_git
+  install_docker
+  install_compose
+  install_kubectl
+  install_helm
+  install_jq
+  install_awscli
+  install_terraform
+  echo ""
+  log "All DevOps tools ready"
+}
+
+# ─── Node.js Installer ─────────────────────────────────────
+install_nodejs() {
+  if command -v node &>/dev/null; then
+    NODE_VER=$(node --version 2>/dev/null)
+    NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v//' | cut -d. -f1)
+    if [ "$NODE_MAJOR" -ge 18 ]; then
+      no_change "Node.js ${NODE_VER}"
+      return
+    fi
+    warn "Node.js ${NODE_VER} found but need 18+. Upgrading..."
   fi
-  info "Installing git..."
+  info "Installing Node.js 20 LTS..."
   case $OS in
-    ubuntu|debian) sudo apt-get install -y -qq git ;;
-    centos|rhel|amzn|fedora) sudo yum install -y git ;;
-    alpine) sudo apk add --no-cache git ;;
-    macos) xcode-select --install 2>/dev/null || true ;;
+    ubuntu|debian)
+      curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+      sudo apt-get install -y -qq nodejs
+      ;;
+    amzn|centos|rhel|fedora)
+      curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+      sudo yum install -y nodejs 2>/dev/null || sudo dnf install -y nodejs
+      ;;
+    alpine) sudo apk add --no-cache nodejs npm ;;
+    macos) brew install node@20 ;;
+    *)
+      curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - 2>/dev/null \
+        || curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+      sudo apt-get install -y nodejs 2>/dev/null || sudo yum install -y nodejs
+      ;;
   esac
-  log "git installed"
+  configured "Node.js $(node --version 2>/dev/null)"
 }
 
-# ─── Deploy Cloud IDE ───────────────────────────────────────
-deploy_ide() {
-  info "Setting up Cloud IDE at ${INSTALL_DIR}..."
-  mkdir -p "${INSTALL_DIR}" 2>/dev/null || sudo mkdir -p "${INSTALL_DIR}"
-
-  if [ -d "${INSTALL_DIR}/.git" ]; then
-    info "Updating existing repo..."
-    cd "${INSTALL_DIR}" && git pull 2>/dev/null || true
-  else
-    info "Cloning repo into ${INSTALL_DIR}..."
-    git clone "${GIT_REPO}" "${INSTALL_DIR}" 2>/dev/null || {
-      warn "Clone failed — pulling images directly"
-    }
-  fi
-
-  cd "${INSTALL_DIR}"
-  info "Working directory: $(pwd)"
-
-  # Build cloud-ide from source
-  if [ -f Dockerfile ]; then
-    info "Building Cloud IDE image..."
-    docker build --no-cache -t "${REPO}:cloud-ide-${TAG}" -t "${REPO}:cloud-ide" .
-  fi
-
-  # Try pulling kyma images — if not available, skip (IDE works standalone)
-  KYMA_AVAILABLE=false
-  if docker pull "${REPO}:kyma-backend-${TAG}" 2>/dev/null || docker pull "${REPO}:kyma-backend" 2>/dev/null; then
-    if docker pull "${REPO}:kyma-frontend-${TAG}" 2>/dev/null || docker pull "${REPO}:kyma-frontend" 2>/dev/null; then
-      KYMA_AVAILABLE=true
-    fi
-  fi
-
-  # Try pulling from original repos if single repo doesn't have them
-  if [ "$KYMA_AVAILABLE" = false ]; then
-    info "Kyma images not in single repo — trying original repos..."
-    if docker pull sriniv7654/kyma-dashboard-backend:latest 2>/dev/null; then
-      docker tag sriniv7654/kyma-dashboard-backend:latest "${REPO}:kyma-backend-${TAG}"
-      docker tag sriniv7654/kyma-dashboard-backend:latest "${REPO}:kyma-backend"
-      if docker pull sriniv7654/kyma-dashboard-frontend:latest 2>/dev/null; then
-        docker tag sriniv7654/kyma-dashboard-frontend:latest "${REPO}:kyma-frontend-${TAG}"
-        docker tag sriniv7654/kyma-dashboard-frontend:latest "${REPO}:kyma-frontend"
-        KYMA_AVAILABLE=true
-      fi
-    fi
-  fi
-
-  # Stop existing
-  docker compose down 2>/dev/null || true
-  docker stop cloud-ide kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
-  docker rm cloud-ide kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
-
-  # Start — IDE only if kyma images unavailable
-  if [ "$KYMA_AVAILABLE" = true ] && [ -f docker-compose.yml ]; then
-    info "Starting full stack (IDE + Kyma Dashboard)..."
-    IMAGE_TAG="${TAG}" KUBECONFIG_PATH="${KUBECONFIG_PATH:-$HOME/.kube/config}" docker compose up -d
-  else
-    if [ "$KYMA_AVAILABLE" = false ]; then
-      warn "Kyma Dashboard images not available — starting IDE only"
-    fi
-    info "Starting Cloud IDE..."
-    docker run -d --name cloud-ide \
-      -p "${PORT}:3456" \
-      -v cloud-ide-data:/app/data \
-      --restart unless-stopped \
-      "${REPO}:cloud-ide-${TAG}"
-  fi
-
-  # Health check
-  info "Waiting for health..."
+# ─── Health Check Helper ───────────────────────────────────
+health_check() {
+  local url="$1" name="$2"
+  info "Waiting for ${name}..."
   for i in $(seq 1 15); do
-    if curl -sf "http://localhost:${PORT}/health" >/dev/null 2>&1; then
-      break
+    if curl -sf "$url" >/dev/null 2>&1; then
+      log "${name} is healthy"
+      return 0
     fi
     sleep 2
     printf "."
   done
   echo ""
+  warn "${name} did not respond within 30s"
+  return 1
 }
 
-# ─── Print Summary ──────────────────────────────────────────
-print_summary() {
+# ─── IDE Native Deployment ─────────────────────────────────
+create_systemd_service() {
+  local SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+  local NODE_BIN
+  NODE_BIN=$(command -v node)
+
+  if [ -f "$SERVICE_FILE" ]; then
+    no_change "systemd service ${SERVICE_NAME}"
+    return
+  fi
+
+  sudo tee "$SERVICE_FILE" > /dev/null <<UNIT
+[Unit]
+Description=Cloud IDE SSH Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${INSTALL_DIR}
+Environment=PORT=${IDE_PORT}
+Environment=STATIC_DIR=${INSTALL_DIR}
+Environment=NODE_ENV=production
+ExecStart=${NODE_BIN} ${INSTALL_DIR}/proxy/server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloud-ide-proxy
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable "${SERVICE_NAME}" 2>/dev/null
+  configured "systemd service ${SERVICE_NAME}"
+}
+
+start_ide_service() {
+  if [ "$IDE_RUNNING" = "yes" ]; then
+    no_change "Cloud IDE already running"
+    return
+  fi
+
+  if command -v systemctl &>/dev/null; then
+    sudo systemctl start "${SERVICE_NAME}"
+  else
+    cd "${INSTALL_DIR}"
+    PORT="${IDE_PORT}" STATIC_DIR="${INSTALL_DIR}" nohup node proxy/server.js \
+      > /var/log/cloud-ide-proxy.log 2>&1 &
+    echo $! > "${INSTALL_DIR}/.proxy.pid"
+  fi
+  configured "Cloud IDE started on port ${IDE_PORT}"
+}
+
+stop_ide_service() {
+  if command -v systemctl &>/dev/null; then
+    sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
+  elif [ -f "${INSTALL_DIR}/.proxy.pid" ]; then
+    kill "$(cat "${INSTALL_DIR}/.proxy.pid")" 2>/dev/null || true
+    rm -f "${INSTALL_DIR}/.proxy.pid"
+  else
+    pkill -f "node.*proxy/server.js" 2>/dev/null || true
+  fi
+}
+
+deploy_ide_native() {
+  echo -e "\n${BOLD}  Deploying Cloud IDE (native proxy)...${NC}\n"
+
+  install_git
+  install_nodejs
+
+  if [ -d "${INSTALL_DIR}/.git" ]; then
+    cd "${INSTALL_DIR}"
+    local OLD_HEAD
+    OLD_HEAD=$(git rev-parse HEAD 2>/dev/null)
+    git pull --ff-only 2>/dev/null || true
+    local NEW_HEAD
+    NEW_HEAD=$(git rev-parse HEAD 2>/dev/null)
+    if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
+      no_change "Repository at ${INSTALL_DIR}"
+    else
+      configured "Updated ${OLD_HEAD:0:8} → ${NEW_HEAD:0:8}"
+    fi
+  else
+    sudo mkdir -p "$(dirname "${INSTALL_DIR}")" 2>/dev/null || true
+    git clone "${GIT_REPO}" "${INSTALL_DIR}"
+    configured "Repository cloned to ${INSTALL_DIR}"
+  fi
+
+  cd "${INSTALL_DIR}/proxy"
+  if [ -d node_modules ] && [ -f package-lock.json ]; then
+    no_change "npm dependencies"
+  else
+    npm install --omit=dev
+    configured "npm dependencies installed"
+  fi
+
+  if command -v systemctl &>/dev/null; then
+    create_systemd_service
+  fi
+
+  stop_ide_service 2>/dev/null || true
+  sleep 1
+  state_check
+  start_ide_service
+
+  health_check "http://localhost:${IDE_PORT}/health" "Cloud IDE"
+  echo ""
+  log "Cloud IDE proxy running on port ${IDE_PORT}"
+}
+
+# ─── Kyma Docker Deployment ────────────────────────────────
+deploy_kyma_docker() {
+  echo -e "\n${BOLD}  Deploying Kyma Dashboard (Docker)...${NC}\n"
+
+  install_docker
+  install_compose
+
+  info "Pulling Kyma images..."
+  docker pull "${REPO}:kyma-backend-${TAG}" 2>/dev/null \
+    || docker pull sriniv7654/kyma-dashboard-backend:latest 2>/dev/null \
+    || { warn "Kyma backend image not available — skipping"; return 1; }
+
+  docker pull "${REPO}:kyma-frontend-${TAG}" 2>/dev/null \
+    || docker pull sriniv7654/kyma-dashboard-frontend:latest 2>/dev/null \
+    || { warn "Kyma frontend image not available — skipping"; return 1; }
+
+  docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  docker rm kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+
+  local KYMA_BE_IMAGE="${REPO}:kyma-backend-${TAG}"
+  docker image inspect "$KYMA_BE_IMAGE" &>/dev/null || KYMA_BE_IMAGE="sriniv7654/kyma-dashboard-backend:latest"
+
+  local KYMA_FE_IMAGE="${REPO}:kyma-frontend-${TAG}"
+  docker image inspect "$KYMA_FE_IMAGE" &>/dev/null || KYMA_FE_IMAGE="sriniv7654/kyma-dashboard-frontend:latest"
+
+  info "Starting Kyma Backend..."
+  docker run -d --name kyma-manager-backend \
+    -p "${KYMA_API_PORT}:8100" \
+    -e NODE_ENV=production \
+    -e PORT=8100 \
+    -e DEV_SKIP_AUTH=true \
+    -e "SESSION_SECRET=${SESSION_SECRET:-cloud-ide-kyma-session-secret-32ch!!}" \
+    -e KUBECONFIG=/kubeconfig/config.yaml \
+    -v "${KUBECONFIG_PATH:-$HOME/.kube/config}:/kubeconfig/config.yaml:ro" \
+    --restart unless-stopped \
+    "$KYMA_BE_IMAGE"
+
+  info "Starting Kyma Frontend..."
+  docker run -d --name kyma-manager-frontend \
+    -p "${KYMA_UI_PORT}:80" \
+    -e "BACKEND_URL=kyma-manager-backend:8100" \
+    --link kyma-manager-backend \
+    --restart unless-stopped \
+    "$KYMA_FE_IMAGE"
+
+  health_check "http://localhost:${KYMA_API_PORT}/health" "Kyma Backend"
+  health_check "http://localhost:${KYMA_UI_PORT}/health" "Kyma Frontend"
+  echo ""
+  log "Kyma Dashboard running on ports ${KYMA_API_PORT}/${KYMA_UI_PORT}"
+}
+
+# ─── Service Control ───────────────────────────────────────
+service_control() {
+  local action="$1"
+  state_check
+
+  case "$action" in
+    start)
+      echo -e "\n${BOLD}  Starting services...${NC}\n"
+      start_ide_service
+      if [ "$HAS_DOCKER" = "yes" ]; then
+        docker start kyma-manager-backend kyma-manager-frontend 2>/dev/null \
+          && configured "Kyma services started" \
+          || warn "Kyma containers not found — install first"
+      fi
+      ;;
+    stop)
+      echo -e "\n${BOLD}  Stopping services...${NC}\n"
+      stop_ide_service
+      configured "Cloud IDE stopped"
+      if [ "$HAS_DOCKER" = "yes" ]; then
+        docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null \
+          && configured "Kyma services stopped" || true
+      fi
+      ;;
+    restart)
+      service_control stop
+      sleep 2
+      service_control start
+      ;;
+  esac
+}
+
+# ─── Update ────────────────────────────────────────────────
+update_all() {
+  echo -e "\n${BOLD}  Updating Cloud IDE...${NC}\n"
+
+  if [ -d "${INSTALL_DIR}/.git" ]; then
+    cd "${INSTALL_DIR}"
+    local OLD_HEAD
+    OLD_HEAD=$(git rev-parse HEAD 2>/dev/null)
+    git pull --ff-only 2>/dev/null || { warn "git pull failed"; return 1; }
+    local NEW_HEAD
+    NEW_HEAD=$(git rev-parse HEAD 2>/dev/null)
+    if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
+      no_change "Repository already at latest"
+    else
+      configured "Updated ${OLD_HEAD:0:8} → ${NEW_HEAD:0:8}"
+      cd proxy && npm install --omit=dev
+    fi
+  else
+    warn "No installation found at ${INSTALL_DIR}"
+    return 1
+  fi
+
+  service_control restart
+
+  if [ "$HAS_DOCKER" = "yes" ]; then
+    info "Pulling latest Kyma images..."
+    docker pull "${REPO}:kyma-backend-${TAG}" 2>/dev/null || true
+    docker pull "${REPO}:kyma-frontend-${TAG}" 2>/dev/null || true
+    docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+    docker rm kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+    deploy_kyma_docker
+  fi
+
+  echo ""
+  log "Update complete"
+}
+
+# ─── View Logs ─────────────────────────────────────────────
+view_logs() {
+  echo -e "\n${BOLD}  Select log source:${NC}\n"
+  echo -e "  ${BOLD}1)${NC}  Cloud IDE proxy"
+  echo -e "  ${BOLD}2)${NC}  Kyma Backend"
+  echo -e "  ${BOLD}3)${NC}  Kyma Frontend"
+  echo -e "  ${BOLD}0)${NC}  Back"
+  echo ""
+  read -rp "  Select [0-3]: " log_choice
+
+  case "$log_choice" in
+    1)
+      if command -v journalctl &>/dev/null; then
+        sudo journalctl -u "${SERVICE_NAME}" --no-pager -n 50
+      elif [ -f /var/log/cloud-ide-proxy.log ]; then
+        tail -50 /var/log/cloud-ide-proxy.log
+      else
+        warn "No logs found"
+      fi
+      ;;
+    2) docker logs kyma-manager-backend --tail 50 2>&1 || warn "Container not found" ;;
+    3) docker logs kyma-manager-frontend --tail 50 2>&1 || warn "Container not found" ;;
+    0) return ;;
+    *) warn "Invalid option" ;;
+  esac
+}
+
+# ─── Uninstall ─────────────────────────────────────────────
+uninstall() {
+  echo -e "\n${RED}${BOLD}  UNINSTALL CLOUD IDE${NC}\n"
+  echo "  This will remove:"
+  echo "    - Cloud IDE proxy service"
+  echo "    - Kyma Dashboard containers"
+  echo "    - Source code at ${INSTALL_DIR}"
+  echo ""
+  read -rp "  Are you sure? (yes/no): " CONFIRM
+  if [ "$CONFIRM" != "yes" ]; then
+    info "Uninstall cancelled"
+    return
+  fi
+
+  stop_ide_service
+  if command -v systemctl &>/dev/null; then
+    sudo systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
+    sudo rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+    sudo systemctl daemon-reload
+  fi
+  destroyed "Cloud IDE proxy service"
+
+  docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  docker rm kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  destroyed "Kyma Docker containers"
+
+  if [ -d "${INSTALL_DIR}" ]; then
+    read -rp "  Delete source code at ${INSTALL_DIR}? (yes/no): " DEL_SRC
+    if [ "$DEL_SRC" = "yes" ]; then
+      sudo rm -rf "${INSTALL_DIR}"
+      destroyed "Source code at ${INSTALL_DIR}"
+    fi
+  fi
+
+  echo ""
+  log "Uninstall complete"
+}
+
+# ─── Status Display ────────────────────────────────────────
+get_server_ip() {
+  local TOKEN IP
   TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)
   IP=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null \
     || curl -sf http://checkip.amazonaws.com 2>/dev/null \
     || curl -sf http://ifconfig.me 2>/dev/null \
     || hostname -I 2>/dev/null | awk '{print $1}' \
     || echo "localhost")
+  echo "$IP"
+}
+
+show_status() {
+  state_check
+  local IP
+  IP=$(get_server_ip)
 
   echo ""
-  echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${BOLD}║                 INSTALLATION COMPLETE                        ║${NC}"
-  echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+  echo -e "${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+  echo -e "${BOLD}║            Cloud IDE — System Status              ║${NC}"
+  echo -e "${BOLD}╚══════════════════════════════════════════════════╝${NC}"
   echo ""
-  echo -e "${BOLD}Tools:${NC}"
-  command -v docker    &>/dev/null && echo -e "  ${GREEN}✓${NC} Docker       $(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')" || echo -e "  ${RED}✗${NC} Docker"
-  command -v docker    &>/dev/null && docker compose version &>/dev/null && echo -e "  ${GREEN}✓${NC} Compose      $(docker compose version --short 2>/dev/null)" || echo -e "  ${RED}✗${NC} Compose"
-  command -v kubectl   &>/dev/null && echo -e "  ${GREEN}✓${NC} kubectl      $(kubectl version --client --short 2>/dev/null | head -1)" || echo -e "  ${RED}✗${NC} kubectl"
-  command -v helm      &>/dev/null && echo -e "  ${GREEN}✓${NC} Helm         $(helm version --short 2>/dev/null)" || echo -e "  ${RED}✗${NC} Helm"
-  command -v jq        &>/dev/null && echo -e "  ${GREEN}✓${NC} jq           $(jq --version 2>/dev/null)" || echo -e "  ${RED}✗${NC} jq"
-  command -v aws       &>/dev/null && echo -e "  ${GREEN}✓${NC} AWS CLI      $(aws --version 2>/dev/null | awk '{print $1}')" || echo -e "  ${RED}✗${NC} AWS CLI"
-  command -v terraform &>/dev/null && echo -e "  ${GREEN}✓${NC} Terraform    $(terraform version 2>/dev/null | head -1 | awk '{print $2}')" || echo -e "  ${RED}✗${NC} Terraform"
-  command -v git       &>/dev/null && echo -e "  ${GREEN}✓${NC} git          $(git --version 2>/dev/null | awk '{print $3}')" || echo -e "  ${RED}✗${NC} git"
+
+  echo -e "${BOLD}  Services:${NC}"
+  if [ "$IDE_RUNNING" = "yes" ]; then
+    echo -e "  ${GREEN}● RUNNING${NC}   Cloud IDE       →  ${CYAN}http://${IP}:${IDE_PORT}${NC}"
+  else
+    echo -e "  ${RED}○ STOPPED${NC}   Cloud IDE"
+  fi
+  if [ "$KYMA_BACKEND_RUNNING" = "yes" ]; then
+    echo -e "  ${GREEN}● RUNNING${NC}   Kyma API        →  ${CYAN}http://${IP}:${KYMA_API_PORT}${NC}"
+  else
+    echo -e "  ${RED}○ STOPPED${NC}   Kyma API"
+  fi
+  if [ "$KYMA_FRONTEND_RUNNING" = "yes" ]; then
+    echo -e "  ${GREEN}● RUNNING${NC}   Kyma Dashboard  →  ${CYAN}http://${IP}:${KYMA_UI_PORT}${NC}"
+  else
+    echo -e "  ${RED}○ STOPPED${NC}   Kyma Dashboard"
+  fi
 
   echo ""
-  echo -e "────────────────────────────────────────────────────────────────"
+  echo -e "${BOLD}  Tools:${NC}"
+  local tools=(
+    "Docker:HAS_DOCKER:$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')"
+    "Compose:HAS_COMPOSE:$(docker compose version --short 2>/dev/null)"
+    "Node.js:HAS_NODE:$(node --version 2>/dev/null)"
+    "kubectl:HAS_KUBECTL:$(kubectl version --client --short 2>/dev/null | head -1)"
+    "Helm:HAS_HELM:$(helm version --short 2>/dev/null)"
+    "jq:HAS_JQ:$(jq --version 2>/dev/null)"
+    "AWS CLI:HAS_AWS:$(aws --version 2>/dev/null | awk '{print $1}')"
+    "Terraform:HAS_TERRAFORM:$(terraform version 2>/dev/null | head -1 | awk '{print $2}')"
+    "git:HAS_GIT:$(git --version 2>/dev/null | awk '{print $3}')"
+  )
+  for entry in "${tools[@]}"; do
+    IFS=: read -r name var ver <<< "$entry"
+    eval "val=\${$var:-no}"
+    if [ "$val" = "yes" ]; then
+      printf "  ${GREEN}✓${NC} %-12s %s\n" "$name" "$ver"
+    else
+      printf "  ${RED}✗${NC} %-12s %s\n" "$name" "(not installed)"
+    fi
+  done
+
   echo ""
-  echo -e "  ${BOLD}${GREEN}>>> OPEN THIS IN YOUR BROWSER <<<${NC}"
-  echo ""
-  echo -e "      ${BOLD}${CYAN}http://${IP}:${PORT}${NC}"
-  echo ""
-  echo -e "      Username: ${BOLD}admin${NC}"
-  echo -e "      Password: ${BOLD}sri@123${NC}"
-  echo ""
-  echo -e "────────────────────────────────────────────────────────────────"
-  echo ""
-  echo -e "${BOLD}All Services:${NC}"
-  echo -e "  ${CYAN}Cloud IDE        →  http://${IP}:${PORT}${NC}"
-  echo -e "  ${CYAN}Kyma Dashboard   →  http://${IP}:3000${NC}  (if available)"
-  echo -e "  ${CYAN}Kyma API         →  http://${IP}:8100${NC}  (if available)"
-  echo ""
-  echo -e "${BOLD}Commands:${NC}"
-  echo -e "  Logs:      ${CYAN}cd ${INSTALL_DIR} && docker compose logs -f${NC}"
-  echo -e "  Stop:      ${CYAN}cd ${INSTALL_DIR} && docker compose down${NC}"
-  echo -e "  Restart:   ${CYAN}cd ${INSTALL_DIR} && docker compose restart${NC}"
-  echo -e "  Update:    ${CYAN}cd ${INSTALL_DIR} && git pull && docker compose up -d${NC}"
+  echo -e "${BOLD}  Credentials:${NC}"
+  echo -e "  Username: ${BOLD}admin${NC}    Password: ${BOLD}sri@123${NC}"
   echo ""
 }
 
-# ─── Main ───────────────────────────────────────────────────
+# ─── Menu System ───────────────────────────────────────────
+show_menu() {
+  while true; do
+    state_check
+
+    local IDE_ICON="${RED}○${NC}"; [ "$IDE_RUNNING" = "yes" ] && IDE_ICON="${GREEN}●${NC}"
+    local KYMA_ICON="${RED}○${NC}"; [ "$KYMA_BACKEND_RUNNING" = "yes" ] && [ "$KYMA_FRONTEND_RUNNING" = "yes" ] && KYMA_ICON="${GREEN}●${NC}"
+    local TOOLS_COUNT=0
+    for t in HAS_DOCKER HAS_KUBECTL HAS_HELM HAS_JQ HAS_AWS HAS_TERRAFORM HAS_GIT; do
+      eval "[ \"\${$t:-no}\" = \"yes\" ]" && TOOLS_COUNT=$((TOOLS_COUNT + 1)) || true
+    done
+
+    echo ""
+    echo -e "${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║        Cloud IDE — Installation Manager          ║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  ${BOLD} 1)${NC}  Install full stack (IDE + Kyma)      ${IDE_ICON}  ${KYMA_ICON}"
+    echo -e "  ${BOLD} 2)${NC}  Install IDE only                     ${IDE_ICON}"
+    echo -e "  ${BOLD} 3)${NC}  Install Kyma Dashboard only             ${KYMA_ICON}"
+    echo -e "  ${BOLD} 4)${NC}  Install DevOps tools                 [${TOOLS_COUNT}/7]"
+    echo -e "  ${BOLD} 5)${NC}  Start all services"
+    echo -e "  ${BOLD} 6)${NC}  Stop all services"
+    echo -e "  ${BOLD} 7)${NC}  Restart all services"
+    echo -e "  ${BOLD} 8)${NC}  Update to latest version"
+    echo -e "  ${BOLD} 9)${NC}  View status"
+    echo -e "  ${BOLD}10)${NC}  View logs"
+    echo -e "  ${BOLD}11)${NC}  Uninstall"
+    echo -e "  ${BOLD} 0)${NC}  Exit"
+    echo ""
+    read -rp "  Select option [0-11]: " choice
+
+    case "$choice" in
+      1)  install_tools; deploy_ide_native; deploy_kyma_docker; show_status ;;
+      2)  deploy_ide_native; show_status ;;
+      3)  deploy_kyma_docker; show_status ;;
+      4)  install_tools ;;
+      5)  service_control start ;;
+      6)  service_control stop ;;
+      7)  service_control restart ;;
+      8)  update_all ;;
+      9)  show_status ;;
+      10) view_logs ;;
+      11) uninstall ;;
+      0)  echo -e "\n  ${GREEN}Goodbye!${NC}\n"; exit 0 ;;
+      *)  warn "Invalid option" ;;
+    esac
+
+    echo ""
+    read -rp "  Press Enter to continue..." _
+  done
+}
+
+# ─── Help ──────────────────────────────────────────────────
+print_help() {
+  echo "Usage: install.sh [OPTIONS]"
+  echo ""
+  echo "Interactive (default when run in terminal):"
+  echo "  ./install.sh                     Show interactive menu"
+  echo ""
+  echo "Non-interactive:"
+  echo "  ./install.sh --install           Full install (IDE + Kyma + tools)"
+  echo "  ./install.sh --ide-only          Install IDE proxy only"
+  echo "  ./install.sh --kyma-only         Install Kyma Dashboard only"
+  echo "  ./install.sh --tools-only        Install DevOps tools only"
+  echo "  ./install.sh --status            Show system status"
+  echo "  ./install.sh --uninstall         Remove everything"
+  echo ""
+  echo "Options:"
+  echo "  --tag=VERSION                    Image tag (default: latest)"
+  echo "  --port=PORT                      IDE port (default: 8101)"
+  echo "  --install-dir=PATH               Install directory (default: /opt/cloud-ide)"
+  echo ""
+  echo "One-liner install:"
+  echo "  curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash"
+  echo ""
+  echo "Interactive via curl:"
+  echo "  curl -sSL URL | bash -s -- --menu"
+}
+
+# ─── Main ──────────────────────────────────────────────────
 main() {
   detect_os
-  echo ""
 
-  # Parse args
-  SKIP_TOOLS=false
-  TOOLS_ONLY=false
   for arg in "$@"; do
     case $arg in
-      --tools-only) TOOLS_ONLY=true ;;
-      --skip-tools) SKIP_TOOLS=true ;;
-      --tag=*) TAG="${arg#*=}" ;;
-      --port=*) PORT="${arg#*=}" ;;
-      --help|-h)
-        echo "Usage: install.sh [OPTIONS]"
-        echo ""
-        echo "Options:"
-        echo "  --tools-only    Install tools only (no Cloud IDE)"
-        echo "  --skip-tools    Skip tool installation (IDE only)"
-        echo "  --tag=v1        Specify image tag (default: latest)"
-        echo "  --port=3456     Specify IDE port (default: 3456)"
-        echo ""
-        echo "One-liner:"
-        echo "  curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash"
-        echo "  curl -sSL ... | bash -s -- --tools-only"
-        echo "  curl -sSL ... | bash -s -- --tag=v1 --port=8080"
-        exit 0
-        ;;
+      --tag=*)         TAG="${arg#*=}" ;;
+      --port=*)        IDE_PORT="${arg#*=}" ;;
+      --install-dir=*) INSTALL_DIR="${arg#*=}" ;;
+      --help|-h)       print_help; exit 0 ;;
     esac
   done
 
-  if [ "$SKIP_TOOLS" = false ]; then
-    echo -e "${BOLD}Installing DevOps tools...${NC}"
-    echo ""
-    install_git
-    install_docker
-    install_compose
-    install_kubectl
-    install_helm
-    install_jq
-    install_awscli
-    install_terraform
+  for arg in "$@"; do
+    case $arg in
+      --install)     install_tools; deploy_ide_native; deploy_kyma_docker; show_status; exit 0 ;;
+      --ide-only)    deploy_ide_native; show_status; exit 0 ;;
+      --kyma-only)   deploy_kyma_docker; show_status; exit 0 ;;
+      --tools-only)  install_tools; exit 0 ;;
+      --status)      show_status; exit 0 ;;
+      --uninstall)   uninstall; exit 0 ;;
+      --menu)        [ ! -t 0 ] && exec < /dev/tty; show_menu; exit 0 ;;
+    esac
+  done
+
+  if [ ! -t 0 ]; then
+    install_tools
+    deploy_ide_native
+    deploy_kyma_docker
+    show_status
+    exit 0
   fi
 
-  if [ "$TOOLS_ONLY" = false ]; then
-    echo ""
-    echo -e "${BOLD}Deploying Cloud IDE...${NC}"
-    echo ""
-    deploy_ide
-  fi
-
-  print_summary
+  show_menu
 }
 
 main "$@"
