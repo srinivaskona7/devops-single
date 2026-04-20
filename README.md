@@ -13,159 +13,219 @@ A production-ready, browser-based IDE with SSH connectivity, 16 DevOps panels, K
 │                                        ├── Srinivas App     │
 │                                        └── Kyma Dashboard   │
 │                                                             │
-│  Cloud IDE (ws://proxy:3456)  ←→  SSH Server (sshd:22)     │
+│  Cloud IDE (ws://proxy:8101)  ←→  SSH Server (sshd:22)     │
 │  Kyma Dashboard (:8100)       ←→  K8s API (kubeconfig)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Docker Images (Single Repo)
+---
+
+## Installation Methods
+
+### Method 1: Full Deploy Pipeline (Recommended)
+
+Complete CI/CD pipeline — clones repo, builds images, pushes to Docker Hub, deploys with volumes and kubeconfig support.
+
+```bash
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash
+```
+
+**What it does (7 steps):**
+1. Clones the repo to `/opt/cloud-ide`
+2. Prompts for Docker Hub password (username: `sriniv7654`)
+3. Builds all 3 Docker images from source
+4. Pushes images to Docker Hub with `latest` tag
+5. Prompts for kubeconfig file upload (paste path or skip)
+6. Deploys containers with persistent volumes (always pulls latest)
+7. Runs health checks and displays access URLs
+
+**With options:**
+```bash
+# Custom tag and port
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash -s -- --tag=v2 --port=8101
+
+# Custom Docker Hub repo
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash -s -- --user=myuser --repo=myuser/myrepo
+
+# All options
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash -s -- \
+  --tag=latest \
+  --port=8101 \
+  --user=sriniv7654 \
+  --repo=sriniv7654/devops-single \
+  --install-dir=/opt/cloud-ide
+```
+
+---
+
+### Method 2: Interactive Installer (Menu-Based)
+
+Interactive menu with 13 options — install, start/stop, update, build, cleanup, uninstall.
+
+```bash
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash -s -- --menu
+```
+
+**Or run directly:**
+```bash
+git clone https://github.com/srinivaskona7/devops-single.git /opt/cloud-ide
+cd /opt/cloud-ide
+./install.sh
+```
+
+**Menu options:**
+```
+╔══════════════════════════════════════════════════╗
+║        Cloud IDE — Installation Manager          ║
+╚══════════════════════════════════════════════════╝
+
+  1)  Install full stack (IDE + Kyma)
+  2)  Install IDE only
+  3)  Install Kyma Dashboard only
+  4)  Install DevOps tools
+  5)  Build Kyma Dashboard from source
+  6)  Start all services
+  7)  Stop all services
+  8)  Restart all services
+  9)  Update to latest version
+ 10)  View status
+ 11)  View logs
+ 12)  Cleanup (remove caches, dangling images)
+ 13)  Uninstall
+  0)  Exit
+```
+
+**Non-interactive flags:**
+```bash
+# Full install (no menu)
+curl -sSL .../install.sh | bash
+
+# IDE only (no Kyma, no Docker needed)
+curl -sSL .../install.sh | bash -s -- --ide-only
+
+# Tools only (Docker, kubectl, Helm, Terraform, AWS CLI, jq, git)
+curl -sSL .../install.sh | bash -s -- --tools-only
+
+# Check status
+./install.sh --status
+
+# Uninstall everything
+./install.sh --uninstall
+```
+
+---
+
+### Method 3: Quick Docker Run (Pre-built Images)
+
+No build required — pulls from Docker Hub directly.
+
+```bash
+# IDE only
+docker run -d -p 8101:3456 --name cloud-ide sriniv7654/devops-single:cloud-ide-latest
+# Open: http://localhost:8101 — Login: admin / sri@123
+
+# Full stack (IDE + Kyma Dashboard)
+docker run -d -p 8101:3456 --name cloud-ide sriniv7654/devops-single:cloud-ide-latest
+docker run -d -p 8100:8100 -e DEV_SKIP_AUTH=true --name kyma-backend sriniv7654/devops-single:kyma-backend-latest
+docker run -d -p 3000:80 --link kyma-backend -e BACKEND_URL=kyma-backend:8100 --name kyma-frontend sriniv7654/devops-single:kyma-frontend-latest
+```
+
+---
+
+### Method 4: Local Development (No Docker)
+
+```bash
+git clone https://github.com/srinivaskona7/devops-single.git && cd devops-single
+cd proxy && npm install
+PORT=8101 node server.js
+# Open: http://localhost:8101
+```
+
+---
+
+## Docker Images
 
 All images live under `sriniv7654/devops-single` with different tags:
 
 | Tag | Size | Description |
 |-----|------|-------------|
-| `cloud-ide` / `cloud-ide-v1` | ~190MB | IDE proxy + 16 panels + static frontend |
-| `kyma-backend` / `kyma-backend-v1` | ~250MB | Fastify API + kubectl + helm |
-| `kyma-frontend` / `kyma-frontend-v1` | ~40MB | React SPA via nginx |
+| `cloud-ide-latest` | ~190MB | IDE proxy + 16 panels + static frontend |
+| `kyma-backend-latest` | ~250MB | Fastify API + kubectl + helm |
+| `kyma-frontend-latest` | ~40MB | React SPA via nginx |
 
-## Quick Start
+## Ports
 
-### Option 1: Run from Docker Hub (fastest)
-```bash
-# IDE only (no K8s dashboard)
-docker run -d -p 3456:3456 --name cloud-ide sriniv7654/devops-single:cloud-ide
-# Open: http://localhost:3456 — Login: admin / sri@123
+| Port | Service | Description |
+|------|---------|-------------|
+| 8101 | Cloud IDE | Browser IDE with SSH proxy |
+| 8100 | Kyma API | Backend REST API + kubectl |
+| 3000 | Kyma Dashboard | React frontend via nginx |
 
-# Full stack (IDE + Kyma Dashboard)
-docker run -d -p 3456:3456 --name cloud-ide sriniv7654/devops-single:cloud-ide
-docker run -d -p 8100:8100 --name kyma-backend sriniv7654/devops-single:kyma-backend
-docker run -d -p 3000:80 --name kyma-frontend -e BACKEND_URL=kyma-backend:8100 sriniv7654/devops-single:kyma-frontend
-```
+## Credentials
 
-### Option 2: One-Line Install (installs ALL tools + IDE)
-```bash
-curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash
-```
-
-This installs: Docker, Docker Compose, kubectl, Helm, jq, AWS CLI, Terraform, git — then deploys the IDE.
-
-```bash
-# Install tools only (no IDE)
-curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash -s -- --tools-only
-
-# Install IDE only (tools already installed)
-curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash -s -- --skip-tools
-
-# Specific version + custom port
-curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/install.sh | bash -s -- --tag=v1 --port=8080
-```
-
-### Option 3: Docker Compose
-```bash
-git clone https://github.com/srinivaskona7/devops-single.git && cd devops-single
-
-# Start everything (IDE + Kyma Dashboard)
-docker compose up -d
-
-# Open: http://localhost:3456
-# Login: admin / sri@123
-```
-
-### Option 2: Docker Run (IDE Only)
-```bash
-docker build -t cloud-ide .
-docker run -d --name cloud-ide \
-  -p 3456:3456 \
-  -v cloud-ide-data:/app/data \
-  -v ~/.kube:/app/.kube:ro \
-  --restart unless-stopped \
-  cloud-ide:latest
-
-# Open: http://localhost:3456
-```
-
-### Option 3: EC2 Deployment
-```bash
-# One-click deploy script
-chmod +x deploy-ec2.sh && ./deploy-ec2.sh
-
-# Or manually:
-sudo yum install -y docker && sudo systemctl start docker
-docker compose up -d
-# Open: http://<ec2-ip>:3456
-```
-
-### Option 4: Local Development (No Docker)
-```bash
-cd proxy && npm install && PORT=3456 node server.js
-# Open: http://localhost:3456
-```
+| Service | Username | Password |
+|---------|----------|----------|
+| Cloud IDE | `admin` | `sri@123` |
+| SSH (example) | `root` | (your server password) |
 
 ---
 
-## Features (15 Panels + Kyma Dashboard)
+## Features (20 VS Code-like + 16 Panels)
 
-### IDE Core
+### Editor Features
 | Feature | Shortcut | Description |
 |---------|----------|-------------|
-| Monaco Editor | — | Syntax highlighting, 50+ languages, v0.55.1 |
-| Terminal | Ctrl+\` | xterm.js with search, unicode11, multi-tab |
-| File Explorer | Ctrl+Shift+E | Tree view, drag-drop upload, download |
-| Quick Open | Ctrl+P | Fuzzy file search |
-| Command Palette | Ctrl+Shift+P | All commands + 5 themes |
-| Fullscreen | F11 / button | Fullscreen toggle |
-| Search | Ctrl+Shift+F | Grep across files with highlighting |
+| Find & Replace | `Ctrl+F` / `Ctrl+H` | Regex, case-sensitive, whole word, replace all |
+| Go to Line | `Ctrl+G` | Jump to line:column |
+| Font Zoom | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Zoom in/out/reset |
+| Auto-save | — | 1.5s debounce, status indicator |
+| Tab Context Menu | Right-click tab | Close, Close Others, Close All, Copy Path |
+| Modified Indicator | — | Dot on unsaved tabs |
+| Keyboard Shortcuts | `Ctrl+K Ctrl+S` | Full shortcut reference panel |
+| Command Palette | `Ctrl+Shift+P` | All commands + 5 themes |
+| Quick Open | `Ctrl+P` | Fuzzy file search |
 
-### DevOps Panels
+### Explorer Features
+| Feature | Description |
+|---------|-------------|
+| Inline Add File/Folder | Input appears directly in tree (VS Code style) |
+| Inline Rename | Double-click to rename |
+| Copy Path | Right-click → Copy Path / Copy Relative Path |
+| Duplicate File | Right-click → Duplicate |
+| Download File | Right-click → Download |
+| Drag & Drop Upload | Overlay with progress indicators |
+| File Size Display | Shown on hover |
+| Collapse All | Button in toolbar |
+| Breadcrumb Navigation | Click path segments for sibling dropdown |
+
+### DevOps Panels (16 total)
 | Panel | Features |
 |-------|----------|
 | **DevOps Tools** | One-click install: Docker, Terraform, AWS CLI, kubectl, Helm |
 | **Git** | Branch, status, stage, commit, push, pull, history |
 | **Docker** | Containers, images, start/stop/restart/logs/exec/rm |
-| **Kubernetes** | 11 resource tabs, YAML editor, exec, port-forward, scale, Helm |
-| **Helm Charts** | Search, install, releases, repos, upgrade, uninstall, values |
-| **Templates** | 30 CNCF templates (databases, monitoring, service mesh, K8s clusters) |
+| **Kubernetes** | 11 resource tabs, YAML editor, exec, port-forward, scale |
+| **Helm Charts** | Search, install, releases, repos, upgrade, uninstall |
+| **Templates** | 30 CNCF templates (databases, monitoring, service mesh) |
 | **Nginx** | Config viewer/editor, test, reload, virtual host creator |
-| **Certificates** | Let's Encrypt via certbot, generate/renew/revoke/download ZIP |
+| **Certificates** | Let's Encrypt via certbot, generate/renew/revoke |
 | **Linux Admin** | CPU/RAM/disk, processes, services, users, cron, firewall |
-| **Log Viewer** | Tail any log, filter, journalctl, quick file picker |
+| **Log Viewer** | Tail any log, filter, journalctl |
 | **Network Tools** | Ping, dig, traceroute, curl, port scan, SSL check, whois |
 | **CI/CD & Ansible** | GitHub Actions, GitLab Runner, Ansible playbook runner |
-| **Settings** | Font size, tab size, word wrap, minimap, 5 color themes |
+| **Kyma Dashboard** | Full K8s management (34 pages, Helm, Istio, OIDC) |
+| **Settings** | Font size, tab size, word wrap, minimap, 5 themes |
 
-### Kyma Dashboard (Embedded)
+### Kyma Dashboard
 | Feature | Description |
 |---------|-------------|
 | Cluster Overview | Resource donuts, node stats, health indicators |
-| 34 Resource Pages | Pods, Deployments, StatefulSets, Services, Ingresses, ConfigMaps, Secrets, etc. |
+| 34 Resource Pages | Pods, Deployments, Services, Ingresses, ConfigMaps, Secrets... |
+| Cluster Connect | Upload kubeconfig, switch clusters (like dashboard.kyma.cloud.sap) |
 | Helm Management | Install, upgrade, rollback with streaming output |
-| Istio | VirtualServices, Gateways, DestinationRules, AuthorizationPolicies |
-| Kyma Extensions | API Rules, Functions, Subscriptions, Modules |
-| Terminal | kubectl/helm command runner |
+| Istio | VirtualServices, Gateways, DestinationRules |
 | YAML Editor | Apply manifests with dry-run |
-| OIDC Auth | Keycloak integration |
-
-### 30 One-Click Deploy Templates
-
-**Hello World:** Nginx, Node.js Express, Python Flask, Go HTTP, Rust Actix
-
-**Databases:** Redis, PostgreSQL, MySQL, MongoDB
-
-**Messaging:** RabbitMQ, Apache Kafka, NATS
-
-**CNCF Observability:** Prometheus, Grafana, Jaeger, Loki
-
-**CNCF Security:** HashiCorp Vault, cert-manager
-
-**CNCF Networking:** Consul, Traefik, Envoy
-
-**CNCF GitOps:** ArgoCD, Flux CD
-
-**Storage:** MinIO S3, etcd
-
-**Kubernetes:** K3s, KinD, Minikube
-
-**Full Stack:** React + Express + PostgreSQL
+| OIDC Support | Keycloak or bypass mode |
 
 ---
 
@@ -173,23 +233,29 @@ cd proxy && npm install && PORT=3456 node server.js
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    Docker Compose                        │
+│                    Production Stack                       │
 │                                                          │
-│  ┌─────────────────┐  ┌──────────────────────────────┐  │
-│  │  cloud-ide:3456  │  │  kyma-dashboard-backend:8100 │  │
-│  │  Node.js Proxy   │  │  Fastify + kubectl + helm    │  │
-│  │  + Static Files  │  │  60+ K8s API endpoints       │  │
-│  │  + WebSocket SSH │  │  JWT/OIDC auth               │  │
-│  └────────┬─────────┘  └──────────┬───────────────────┘  │
-│           │                       │                      │
-│  ┌────────┴─────────┐  ┌─────────┴───────────────────┐  │
-│  │  Frontend (HTML)  │  │  kyma-dashboard-frontend    │  │
-│  │  15 vanilla JS    │  │  React 18 + Vite + Tailwind │  │
-│  │  panels           │  │  34 pages (code-split)      │  │
-│  │  Monaco + xterm   │  │  Embedded via iframe        │  │
-│  └──────────────────┘  └─────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────┐ │
+│  │  Cloud IDE (Native Node.js on host)                 │ │
+│  │  Port: 8101                                         │ │
+│  │  - HTTP static server (index.html, JS, CSS)         │ │
+│  │  - WebSocket SSH proxy (ssh2 library)               │ │
+│  │  - SFTP file operations                             │ │
+│  │  - systemd managed (auto-restart)                   │ │
+│  └─────────────────────────────────────────────────────┘ │
 │                                                          │
-│  Volumes: /app/data, /app/.kube (kubeconfig)             │
+│  ┌──────────────────────┐  ┌──────────────────────────┐ │
+│  │  Kyma Backend (:8100) │  │  Kyma Frontend (:3000)   │ │
+│  │  Docker container     │  │  Docker container        │ │
+│  │  Fastify + kubectl    │  │  React + nginx           │ │
+│  │  + helm + 60 APIs     │  │  + Vite + Tailwind       │ │
+│  │  DEV_SKIP_AUTH=true   │  │  VITE_SKIP_AUTH=true     │ │
+│  └──────────────────────┘  └──────────────────────────┘ │
+│                                                          │
+│  Volumes:                                                │
+│    /opt/cloud-ide/data         → IDE persistent config   │
+│    /opt/cloud-ide/kubeconfigs  → uploaded kubeconfigs     │
+│    kyma-generated              → backend generated files  │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -197,99 +263,64 @@ cd proxy && npm install && PORT=3456 node server.js
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3456` | Cloud IDE proxy port |
-| `DASHBOARD_URL` | `http://kyma-backend:8100` | Kyma dashboard backend URL |
-| `KUBECONFIG` | `/app/.kube/config` | Path to kubeconfig file |
-| `DEV_SKIP_AUTH` | `false` | Skip OIDC auth in dev mode |
+| `PORT` | `8101` | Cloud IDE proxy port |
+| `IDE_PORT` | `8101` | Same as PORT (for install.sh) |
+| `KYMA_API_PORT` | `8100` | Kyma backend API port |
+| `KYMA_UI_PORT` | `3000` | Kyma frontend port |
+| `DEV_SKIP_AUTH` | `true` | Skip OIDC/Keycloak auth |
+| `VITE_SKIP_AUTH` | `true` | Skip frontend auth (build-time) |
+| `KUBECONFIG` | `/kubeconfig/config.yaml` | Kubeconfig path in backend |
+| `IMAGE_TAG` | `latest` | Docker image tag |
+| `INSTALL_DIR` | `/opt/cloud-ide` | Installation directory |
 | `NODE_ENV` | `production` | Environment |
 
-## Build & Push (for maintainers)
+## Volumes
+
+| Path | Purpose |
+|------|---------|
+| `/opt/cloud-ide/data` | IDE persistent configuration |
+| `/opt/cloud-ide/kubeconfigs` | Uploaded kubeconfig files |
+| `kyma-generated` (Docker volume) | Backend generated files |
+
+## Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `install.sh` | Interactive installer (13 menu options) |
+| `deploy.sh` | Full CI/CD pipeline (clone → build → push → deploy) |
+| `build-kyma.sh` | Build Kyma images only (with auth bypass) |
+| `build-push.sh` | Build and push all images to Docker Hub |
+| `deploy-ec2.sh` | EC2-specific deployment |
+
+## Commands Cheat Sheet
 
 ```bash
-# Login to Docker Hub
-docker login
+# Check status
+./install.sh --status
 
-# Build and push all images to sriniv7654/devops-single
-./build-push.sh v1
+# View logs
+docker logs -f kyma-manager-backend
+journalctl -u cloud-ide-proxy -f
 
-# This pushes:
-#   sriniv7654/devops-single:cloud-ide-v1
-#   sriniv7654/devops-single:cloud-ide
-#   sriniv7654/devops-single:kyma-backend-v1
-#   sriniv7654/devops-single:kyma-backend
-#   sriniv7654/devops-single:kyma-frontend-v1
-#   sriniv7654/devops-single:kyma-frontend
+# Restart services
+sudo systemctl restart cloud-ide-proxy
+docker restart kyma-manager-backend kyma-manager-frontend
 
-# Deploy a specific version
-IMAGE_TAG=v1 docker compose up -d
+# Update to latest
+cd /opt/cloud-ide && git pull && sudo systemctl restart cloud-ide-proxy
 
-# Deploy latest
-docker compose up -d
+# Upload kubeconfig
+cp /path/to/kubeconfig.yaml /opt/cloud-ide/kubeconfigs/
+
+# Cleanup
+docker image prune -f && docker builder prune -f
 ```
-
-## Docker Image Details
-
-| Property | Value |
-|----------|-------|
-| Base | `node:20-alpine` |
-| Init | `tini` (PID 1 signal handling) |
-| User | `node` (non-root, uid=1000) |
-| Stages | 3 (deps → minify → runtime) |
-| Size | ~190MB (IDE only), ~450MB (with dashboard) |
-| Health | `GET /health` every 15s |
-| Graceful shutdown | SIGTERM → close connections → exit |
-
-## Ports
-
-| Port | Service |
-|------|---------|
-| 3456 | Cloud IDE (proxy + frontend) |
-| 8100 | Kyma Dashboard backend API |
-| 3000 | Kyma Dashboard frontend (nginx) |
-
-## Volume Mounts
-
-```yaml
-volumes:
-  - cloud-ide-data:/app/data          # Persistent IDE config
-  - cloud-ide-templates:/app/templates # Custom templates
-  - ~/.kube:/app/.kube:ro             # Kubeconfig (read-only)
-```
-
-## Security
-
-- Auth: admin/sri@123 (configurable)
-- Non-root container (uid=1000)
-- Read-only filesystem + tmpfs
-- No-new-privileges security option
-- Graceful shutdown on SIGTERM/SIGINT
-- Gzip compression + ETag caching
-- WebSocket keepalive (30s ping/pong)
-- Input escaping for SSH commands
 
 ## Browser Support
 
 - Chrome 90+, Firefox 88+, Safari 15+, Edge 90+
 - Mobile responsive (390px — 4K)
-- Touch-friendly (44px+ touch targets)
-- Keyboard accessible (focus-visible)
-- Reduced motion support
 - 5 themes: Dark (default), Monokai, Dracula, Nord, Solarized
-
-## Development
-
-```bash
-# Run proxy with hot reload
-cd proxy && npm install
-PORT=3456 node server.js
-
-# Run Kyma dashboard in dev mode
-cd ../btp-terraform/dashboard
-docker compose -f docker-compose.dev.yml up
-
-# All services
-docker compose up --build
-```
 
 ## License
 
