@@ -6,16 +6,12 @@ RUN npm install --omit=dev --registry https://registry.npmjs.org \
     && npm cache clean --force \
     && rm -rf /root/.npm /tmp/*
 
-# ─── Stage 2: Minify static assets ──────────────────────
+# ─── Stage 2: Copy static assets (no minification — sed-based minifiers break JS) ──
 FROM node:20-alpine AS minify
 WORKDIR /src
 COPY css/ ./css/
 COPY js/ ./js/
 COPY index.html ./
-# Inline minification: strip comments, collapse whitespace in CSS/JS
-RUN apk add --no-cache findutils \
-    && find css/ -name '*.css' -exec sh -c 'sed -e "s|/\*[^*]*\*\+\([^/*][^*]*\*\+\)*/||g" -e "s/^[[:space:]]*//" -e "/^$/d" "$1" > "$1.min" && mv "$1.min" "$1"' _ {} \; \
-    && find js/ -name '*.js' -exec sh -c 'sed -e "s|//[^'\''\"]*$||" -e "s/^[[:space:]]*//" -e "/^$/d" "$1" > "$1.min" && mv "$1.min" "$1"' _ {} \;
 
 # ─── Stage 3: Final production image ────────────────────
 FROM node:20-alpine
