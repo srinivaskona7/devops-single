@@ -76,7 +76,7 @@ const httpServer = http.createServer((req, res) => {
   const headers = {
     'Content-Type': entry.mime,
     'ETag': entry.etag,
-    'Cache-Control': entry.mime === 'text/html' ? 'no-cache' : 'public, max-age=86400, immutable',
+    'Cache-Control': 'no-cache',
     'Vary': 'Accept-Encoding',
   };
 
