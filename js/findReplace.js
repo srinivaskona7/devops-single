@@ -343,11 +343,16 @@
     _show() {
       this.editor = this._getEditor();
       if (!this.editor) {
-        // Editor not ready yet; show panel anyway so user knows it opened.
         this.panel.classList.add('visible');
         this.findInput.focus();
         return;
       }
+
+      // Disable Monaco's built-in find widget
+      try {
+        this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => this.openFind());
+        this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => this.openFindReplace());
+      } catch (_) {}
 
       // Pre-fill with current selection if any
       const sel = this.editor.getSelection();
