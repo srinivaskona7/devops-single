@@ -1,73 +1,32 @@
-# ── Stage 1: Download kubectl + helm ─────────────────────────────────────────
+# ── Stage 1: Install kubectl + helm ──────────────────────────────────────────
 FROM node:20-alpine AS tools
 ARG KUBECTL_VERSION=v1.29.0
 ARG HELM_VERSION=v3.14.4
-ARG TARGETARCH=amd64
-RUN apk add --no-cache curl ca-certificates \
-  && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
-       -o /usr/local/bin/kubectl \
-  && chmod +x /usr/local/bin/kubectl \
-  && curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-${TARGETARCH}.tar.gz" \
-       | tar xz --strip-components=1 -C /usr/local/bin "linux-${TARGETARCH}/helm"
+RUN apk add --no-cache curl \
+  && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+       -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl \
+  && curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+       | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
 
-# ── Stage 2: Build frontend static assets ────────────────────────────────────
-FROM node:20-alpine AS frontend-builder
-WORKDIR /build
-COPY frontend/package*.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --legacy-peer-deps
-COPY frontend/ ./
-ENV VITE_SKIP_AUTH=true
-RUN npm run build
+# ── Stage 2: Production dependencies ────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json ./
+RUN npm install --omit=dev
 
-# ── Stage 3: Compile TypeScript (all deps needed for tsc) ────────────────────
-FROM node:20-alpine AS backend-builder
-# kubectl + helm needed at runtime (both in dev and prod image)
+# ── Stage 3: Runtime ─────────────────────────────────────────────────────────
+FROM node:20-alpine
+
 COPY --from=tools /usr/local/bin/kubectl /usr/local/bin/kubectl
-COPY --from=tools /usr/local/bin/helm    /usr/local/bin/helm
-WORKDIR /build
-COPY backend/package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install
-COPY backend/ ./
-# Compile TS; strip maps + declarations — not needed at runtime
-RUN npx tsc \
-  && find dist -name '*.map' -delete \
-  && find dist -name '*.d.ts' -delete
-
-# ── Stage 4: Production-only deps (no devDependencies) ───────────────────────
-FROM node:20-alpine AS prod-deps
-WORKDIR /build
-COPY backend/package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --omit=dev
-
-# ── Stage 5: Minimal runtime image ───────────────────────────────────────────
-FROM node:20-alpine AS runtime
-
-# CLI tools from tiny alpine stage
-COPY --from=tools /usr/local/bin/kubectl /usr/local/bin/kubectl
-COPY --from=tools /usr/local/bin/helm    /usr/local/bin/helm
-
-# Least-privilege user
-RUN addgroup -S app && adduser -S -G app app
+COPY --from=tools /usr/local/bin/helm /usr/local/bin/helm
 
 WORKDIR /app
 
-# Compiled backend (no source, no maps, no type declarations)
-COPY --chown=app:app --from=backend-builder /build/dist         ./dist
-# Production node_modules only (no devDeps)
-COPY --chown=app:app --from=prod-deps       /build/node_modules  ./node_modules
-COPY --chown=app:app --from=backend-builder /build/package.json  ./package.json
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY dist/ ./dist/
 
-# Frontend served as static files by backend (@fastify/static)
-COPY --chown=app:app --from=frontend-builder /build/dist         ./frontend/dist
-
-# Kube/Helm config dirs for the app user
-RUN mkdir -p /home/app/.kube /home/app/.helm \
-  && chown -R app:app /home/app
-
-USER app
+RUN mkdir -p /root/.kube /root/.helm
 
 ENV NODE_ENV=production \
     PORT=8100 \
@@ -76,7 +35,7 @@ ENV NODE_ENV=production \
 
 EXPOSE 8100
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8100/health || exit 1
 
 CMD ["node", "dist/index.js"]

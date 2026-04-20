@@ -2,8 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 COPY . .
 ENV VITE_SKIP_AUTH=true
 RUN npm run build

@@ -692,13 +692,11 @@ build_kyma_from_source() {
   cd "${KYMA_SRC}"
 
   info "Building backend image with DEV_SKIP_AUTH=true..."
-  docker build -f backend/Dockerfile -t "${REPO}:kyma-backend-${TAG}" . 2>&1 | tail -5
+  docker build -f backend/Dockerfile -t "${REPO}:kyma-backend-${TAG}" backend/ 2>&1 | tail -5
   configured "Kyma Backend image"
 
   info "Building frontend image with VITE_SKIP_AUTH=true..."
-  docker build -f frontend/Dockerfile \
-    --build-arg VITE_SKIP_AUTH=true \
-    -t "${REPO}:kyma-frontend-${TAG}" . 2>&1 | tail -5
+  docker build -f frontend/Dockerfile -t "${REPO}:kyma-frontend-${TAG}" frontend/ 2>&1 | tail -5
   configured "Kyma Frontend image"
 
   docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
@@ -827,15 +825,13 @@ full_build_push_deploy() {
   configured "Cloud IDE image"
 
   if [ -d "kyma-dashboard/backend" ]; then
-    cd kyma-dashboard
     info "  Building Kyma Backend (DEV_SKIP_AUTH=true)..."
-    docker build --no-cache -t "${REPO}:kyma-backend-${TAG}" -t "${REPO}:kyma-backend" -f backend/Dockerfile . 2>&1 | tail -3
+    docker build --no-cache -t "${REPO}:kyma-backend-${TAG}" -t "${REPO}:kyma-backend" -f kyma-dashboard/backend/Dockerfile kyma-dashboard/backend 2>&1 | tail -3
     configured "Kyma Backend image"
 
     info "  Building Kyma Frontend (VITE_SKIP_AUTH=true)..."
-    docker build --no-cache -t "${REPO}:kyma-frontend-${TAG}" -t "${REPO}:kyma-frontend" -f frontend/Dockerfile . 2>&1 | tail -3
+    docker build --no-cache -t "${REPO}:kyma-frontend-${TAG}" -t "${REPO}:kyma-frontend" -f kyma-dashboard/frontend/Dockerfile kyma-dashboard/frontend 2>&1 | tail -3
     configured "Kyma Frontend image"
-    cd ..
   fi
   echo ""
 
