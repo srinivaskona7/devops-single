@@ -10,6 +10,7 @@ class FileExplorer {
     this.onFileOpen = null;
     this.fileCache = new Map();
     this.renameInProgress = false;
+    this.inlineInputActive = false;
     this.lastClickTime = 0;
     this.lastClickPath = null;
   }
@@ -198,6 +199,169 @@ class FileExplorer {
     });
   }
 
+  async addInlineInput(parentPath, type) {
+    if (this.inlineInputActive) return;
+
+    let targetDir = parentPath;
+    let targetItem = null;
+
+    if (!targetDir) {
+      if (this.selectedPath) {
+        const selectedEl = this.container.querySelector(`.tree-item[data-path="${CSS.escape(this.selectedPath)}"]`);
+        if (selectedEl) {
+          if (selectedEl.dataset.type === 'directory') {
+            targetDir = this.selectedPath;
+            targetItem = selectedEl;
+          } else {
+            targetDir = this.getParentPath(this.selectedPath);
+          }
+        }
+      }
+    } else {
+      targetItem = this.container.querySelector(`.tree-item[data-path="${CSS.escape(targetDir)}"]`);
+    }
+
+    if (!targetDir) {
+      targetDir = this.rootPath;
+    }
+
+    let childContainer = null;
+    let depth = 0;
+
+    if (targetDir === this.rootPath && !targetItem) {
+      childContainer = this.container;
+      depth = 0;
+    } else if (targetItem && targetItem.dataset.type === 'directory') {
+      if (!this.expandedPaths.has(targetDir)) {
+        await this.toggleDirectory(targetDir, targetItem);
+      }
+      const next = targetItem.nextElementSibling;
+      if (next && next.classList.contains('tree-children')) {
+        childContainer = next;
+      } else {
+        childContainer = document.createElement('div');
+        childContainer.className = 'tree-children';
+        targetItem.after(childContainer);
+      }
+      depth = parseInt(targetItem.style.getPropertyValue('--depth')) + 1;
+    } else {
+      const parentItem = this.container.querySelector(`.tree-item[data-path="${CSS.escape(targetDir)}"]`);
+      if (parentItem) {
+        const next = parentItem.nextElementSibling;
+        if (next && next.classList.contains('tree-children')) {
+          childContainer = next;
+          depth = parseInt(parentItem.style.getPropertyValue('--depth')) + 1;
+        }
+      }
+      if (!childContainer) {
+        childContainer = this.container;
+        depth = 0;
+      }
+    }
+
+    const emptyEl = childContainer.querySelector(':scope > .tree-empty');
+    if (emptyEl) emptyEl.remove();
+
+    this.inlineInputActive = true;
+
+    const row = document.createElement('div');
+    row.className = `tree-item ${type === 'directory' ? 'directory' : 'file'} tree-inline-new`;
+    row.style.setProperty('--depth', depth);
+
+    const indent = document.createElement('span');
+    indent.className = 'tree-indent';
+    indent.style.width = `${depth * 16}px`;
+    row.appendChild(indent);
+
+    const chevron = document.createElement('span');
+    chevron.className = 'tree-chevron';
+    if (type === 'directory') {
+      chevron.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>';
+    }
+    row.appendChild(chevron);
+
+    const icon = document.createElement('span');
+    icon.className = 'tree-icon';
+    icon.innerHTML = type === 'directory' ? this.getFolderIcon('', false) : this.getFileIcon('newfile');
+    row.appendChild(icon);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tree-rename-input';
+    input.value = '';
+    input.placeholder = type === 'directory' ? 'folder name' : 'file name';
+    row.appendChild(input);
+
+    childContainer.insertBefore(row, childContainer.firstChild);
+
+    input.focus();
+
+    let finished = false;
+
+    const cleanup = () => {
+      if (row.parentNode) row.parentNode.removeChild(row);
+      this.inlineInputActive = false;
+    };
+
+    const commit = async () => {
+      if (finished) return;
+      finished = true;
+
+      const name = input.value.trim();
+      if (!name) {
+        cleanup();
+        return;
+      }
+
+      const newPath = targetDir.replace(/\/$/, '') + '/' + name;
+
+      try {
+        if (type === 'directory') {
+          await this.connection.mkdir(newPath);
+        } else {
+          await this.connection.writeFile(newPath, '');
+        }
+        cleanup();
+        if (targetDir === this.rootPath && childContainer === this.container) {
+          await this.refresh();
+        } else {
+          await this.refreshDirectory(targetDir);
+        }
+        if (window.app && window.app.notify) {
+          window.app.notify(`${type === 'directory' ? 'Folder' : 'File'} created: ${name}`, 'success');
+        }
+        if (type === 'file' && this.onFileOpen) {
+          this.onFileOpen(newPath, name);
+        }
+      } catch (err) {
+        cleanup();
+        if (window.app && window.app.notify) {
+          window.app.notify(`Create failed: ${err.message}`, 'error');
+        }
+      }
+    };
+
+    const cancel = () => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+    };
+
+    input.addEventListener('blur', () => { commit(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+  }
+
+  addInlineFile(parentPath) {
+    return this.addInlineInput(parentPath, 'file');
+  }
+
+  addInlineFolder(parentPath) {
+    return this.addInlineInput(parentPath, 'directory');
+  }
+
   selectItem(item) {
     this.container.querySelectorAll('.tree-item.selected').forEach((el) => el.classList.remove('selected'));
     item.classList.add('selected');
@@ -318,7 +482,7 @@ class FileExplorer {
       return `<svg viewBox="0 0 16 16" fill="${color}"><path d="M1.5 14h13a.5.5 0 00.49-.41l1-5A.5.5 0 0015.5 8H14V5.5a.5.5 0 00-.5-.5H7.71l-.85-1.7A.5.5 0 006.41 3H1.5a.5.5 0 00-.5.5v10a.5.5 0 00.5.5z"/></svg>`;
     }
     return `<svg viewBox="0 0 16 16" fill="${color}"><path d="M14.5 5H7.71l-.85-1.7A.5.5 0 006.41 3H1.5a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h13a.5.5 0 00.5-.5v-7a.5.5 0 00-.5-.5z"/></svg>`;
-  }
+    }
 
   escapeHtml(text) {
     const div = document.createElement('div');

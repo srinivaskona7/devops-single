@@ -19,6 +19,15 @@ class App {
     this.notificationCenter = null;
     this.breadcrumbs = null;
     this.fileTransfer = null;
+    this.findReplace = null;
+    this.tabManager = null;
+    this.navigationPanel = null;
+    this.statusBarExtra = null;
+    this.explorerActions = null;
+    this.editorExtras = null;
+    this.dragDrop = null;
+    this.welcomeTab = null;
+    this.breadcrumbNav = null;
     this.homePath = '/';
     this.notificationTimeout = null;
     this.authenticated = false;
@@ -331,10 +340,39 @@ class App {
     this.fileTransfer = new FileTransfer(this.connection, this);
     this.fileTransfer.init();
 
+    this.findReplace = new FindReplacePanel();
+    this.findReplace.init();
+
+    this.tabManager = new TabManager(this.editorManager);
+    this.tabManager.init();
+
+    this.navigationPanel = new NavigationPanel(this);
+    this.navigationPanel.init();
+
+    this.statusBarExtra = new StatusBarExtra(this);
+    this.statusBarExtra.init();
+
+    this.explorerActions = new ExplorerActions(this);
+    this.explorerActions.init();
+
+    this.editorExtras = new EditorExtras(this);
+    this.editorExtras.init();
+
+    this.dragDrop = new DragDropUpload(this);
+    this.dragDrop.init();
+
+    this.welcomeTab = new WelcomeTab(this);
+    this.welcomeTab.init();
+
+    this.breadcrumbNav = new BreadcrumbNav(this);
+    this.breadcrumbNav.init();
+
     const origOpenFile = this.editorManager.openFile.bind(this.editorManager);
     this.editorManager.openFile = (path, name) => {
       origOpenFile(path, name);
       if (this.breadcrumbs) this.breadcrumbs.update(path);
+      if (this.welcomeTab) this.welcomeTab.addRecentFile(path, name);
+      if (this.welcomeTab) this.welcomeTab.hide();
     };
 
     this.bindIDEEvents();
@@ -373,11 +411,11 @@ class App {
     });
 
     document.getElementById('btn-new-file').addEventListener('click', () => {
-      this.promptNewFile();
+      this.fileExplorer.addInlineFile();
     });
 
     document.getElementById('btn-new-folder').addEventListener('click', () => {
-      this.promptNewFolder();
+      this.fileExplorer.addInlineFolder();
     });
 
     document.getElementById('btn-refresh-tree').addEventListener('click', () => {
@@ -680,6 +718,15 @@ class App {
     if (this.logViewerPanel) { this.logViewerPanel.dispose(); this.logViewerPanel = null; }
     if (this.networkToolsPanel) { this.networkToolsPanel.dispose(); this.networkToolsPanel = null; }
     if (this.cicdPanel) { this.cicdPanel.dispose(); this.cicdPanel = null; }
+    if (this.findReplace) { this.findReplace.dispose(); this.findReplace = null; }
+    if (this.tabManager) { this.tabManager.dispose(); this.tabManager = null; }
+    if (this.navigationPanel) { this.navigationPanel.dispose(); this.navigationPanel = null; }
+    if (this.statusBarExtra) { this.statusBarExtra.dispose(); this.statusBarExtra = null; }
+    if (this.explorerActions) { this.explorerActions.dispose(); this.explorerActions = null; }
+    if (this.editorExtras) { this.editorExtras.dispose(); this.editorExtras = null; }
+    if (this.dragDrop) { this.dragDrop.dispose(); this.dragDrop = null; }
+    if (this.welcomeTab) { this.welcomeTab.dispose(); this.welcomeTab = null; }
+    if (this.breadcrumbNav) { this.breadcrumbNav.dispose(); this.breadcrumbNav = null; }
     this.fileExplorer = null;
     this.splitPane = null;
 
