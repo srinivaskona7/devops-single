@@ -673,6 +673,73 @@ show_status() {
   echo ""
 }
 
+# ─── Build Kyma from Source ────────────────────────────────
+build_kyma_from_source() {
+  echo -e "\n${BOLD}  Building Kyma Dashboard from source (auth bypass)...${NC}\n"
+
+  install_docker
+  install_git
+
+  local KYMA_SRC="/tmp/kyma-dashboard-build"
+
+  if [ -f "${INSTALL_DIR}/build-kyma.sh" ]; then
+    info "Running build script from ${INSTALL_DIR}/build-kyma.sh..."
+    bash "${INSTALL_DIR}/build-kyma.sh"
+    return
+  fi
+
+  info "Cloning Kyma Dashboard source..."
+  rm -rf "${KYMA_SRC}"
+  git clone https://github.com/srinivaskona7/kyma-dashboard.git "${KYMA_SRC}" 2>/dev/null || {
+    warn "Kyma dashboard repo not found. Using embedded build..."
+    _build_kyma_embedded
+    return
+  }
+
+  cd "${KYMA_SRC}"
+  if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
+    warn "Invalid dashboard source structure"
+    _build_kyma_embedded
+    return
+  fi
+
+  info "Building backend image with DEV_SKIP_AUTH=true..."
+  docker build -f backend/Dockerfile -t "${REPO}:kyma-backend-${TAG}" .
+  configured "Kyma Backend image"
+
+  info "Building frontend image with VITE_SKIP_AUTH=true..."
+  docker build -f frontend/Dockerfile \
+    --build-arg VITE_SKIP_AUTH=true \
+    -t "${REPO}:kyma-frontend-${TAG}" .
+  configured "Kyma Frontend image"
+
+  docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  docker rm kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  deploy_kyma_docker
+
+  rm -rf "${KYMA_SRC}"
+  log "Kyma Dashboard built and deployed (auth bypassed)"
+}
+
+_build_kyma_embedded() {
+  info "Building minimal Kyma images with auth bypass..."
+
+  docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+  docker rm kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
+
+  info "Pulling base images and patching..."
+  if docker pull sriniv7654/kyma-dashboard-backend:latest 2>/dev/null; then
+    docker tag sriniv7654/kyma-dashboard-backend:latest "${REPO}:kyma-backend-${TAG}"
+  fi
+  if docker pull sriniv7654/kyma-dashboard-frontend:latest 2>/dev/null; then
+    docker tag sriniv7654/kyma-dashboard-frontend:latest "${REPO}:kyma-frontend-${TAG}"
+  fi
+
+  deploy_kyma_docker
+  warn "Using pre-built images — Keycloak login may still appear"
+  warn "To fix: clone kyma-dashboard repo and rebuild with VITE_SKIP_AUTH=true"
+}
+
 # ─── Menu System ───────────────────────────────────────────
 show_menu() {
   while true; do
@@ -694,29 +761,31 @@ show_menu() {
     echo -e "  ${BOLD} 2)${NC}  Install IDE only                     ${IDE_ICON}"
     echo -e "  ${BOLD} 3)${NC}  Install Kyma Dashboard only             ${KYMA_ICON}"
     echo -e "  ${BOLD} 4)${NC}  Install DevOps tools                 [${TOOLS_COUNT}/7]"
-    echo -e "  ${BOLD} 5)${NC}  Start all services"
-    echo -e "  ${BOLD} 6)${NC}  Stop all services"
-    echo -e "  ${BOLD} 7)${NC}  Restart all services"
-    echo -e "  ${BOLD} 8)${NC}  Update to latest version"
-    echo -e "  ${BOLD} 9)${NC}  View status"
-    echo -e "  ${BOLD}10)${NC}  View logs"
-    echo -e "  ${BOLD}11)${NC}  Uninstall"
+    echo -e "  ${BOLD} 5)${NC}  Build Kyma Dashboard from source"
+    echo -e "  ${BOLD} 6)${NC}  Start all services"
+    echo -e "  ${BOLD} 7)${NC}  Stop all services"
+    echo -e "  ${BOLD} 8)${NC}  Restart all services"
+    echo -e "  ${BOLD} 9)${NC}  Update to latest version"
+    echo -e "  ${BOLD}10)${NC}  View status"
+    echo -e "  ${BOLD}11)${NC}  View logs"
+    echo -e "  ${BOLD}12)${NC}  Uninstall"
     echo -e "  ${BOLD} 0)${NC}  Exit"
     echo ""
-    read -rp "  Select option [0-11]: " choice
+    read -rp "  Select option [0-12]: " choice
 
     case "$choice" in
       1)  install_tools; deploy_ide_native; deploy_kyma_docker; show_status ;;
       2)  deploy_ide_native; show_status ;;
       3)  deploy_kyma_docker; show_status ;;
       4)  install_tools ;;
-      5)  service_control start ;;
-      6)  service_control stop ;;
-      7)  service_control restart ;;
-      8)  update_all ;;
-      9)  show_status ;;
-      10) view_logs ;;
-      11) uninstall ;;
+      5)  build_kyma_from_source ;;
+      6)  service_control start ;;
+      7)  service_control stop ;;
+      8)  service_control restart ;;
+      9)  update_all ;;
+      10) show_status ;;
+      11) view_logs ;;
+      12) uninstall ;;
       0)  echo -e "\n  ${GREEN}Goodbye!${NC}\n"; exit 0 ;;
       *)  warn "Invalid option" ;;
     esac
