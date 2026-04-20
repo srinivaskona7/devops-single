@@ -9,6 +9,9 @@ class FileExplorer {
     this.contextTarget = null;
     this.onFileOpen = null;
     this.fileCache = new Map();
+    this.renameInProgress = false;
+    this.lastClickTime = 0;
+    this.lastClickPath = null;
   }
 
   async init(rootPath) {
@@ -28,6 +31,15 @@ class FileExplorer {
       const result = await this.connection.listFiles(path, this.showHidden);
       this.fileCache.set(path, result.entries);
 
+      if (result.entries.length === 0) {
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'tree-empty';
+        emptyEl.style.paddingLeft = `${(depth + 1) * 16 + 8}px`;
+        emptyEl.textContent = 'This folder is empty';
+        parentEl.appendChild(emptyEl);
+        return;
+      }
+
       result.entries.forEach((entry) => {
         const item = this.createTreeItem(entry, depth);
         parentEl.appendChild(item);
@@ -41,8 +53,8 @@ class FileExplorer {
       });
     } catch (err) {
       const errorEl = document.createElement('div');
-      errorEl.className = 'tree-item';
-      errorEl.style.cssText = `padding-left:${depth * 16 + 8}px;color:var(--accent-red);font-size:12px;`;
+      errorEl.className = 'tree-item tree-error';
+      errorEl.style.cssText = `padding-left:${depth * 16 + 8}px;`;
       errorEl.textContent = `Error: ${err.message}`;
       parentEl.appendChild(errorEl);
     }
@@ -56,31 +68,66 @@ class FileExplorer {
     item.dataset.type = entry.type;
     item.dataset.name = entry.name;
 
+    const indent = document.createElement('span');
+    indent.className = 'tree-indent';
+    indent.style.width = `${depth * 16}px`;
+    item.appendChild(indent);
+
     if (entry.type === 'directory') {
       const isOpen = this.expandedPaths.has(entry.path);
-      item.innerHTML = `
-        <span class="tree-chevron ${isOpen ? 'open' : ''}">
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
-        </span>
-        <span class="tree-icon">${this.getFolderIcon(entry.name, isOpen)}</span>
-        <span class="tree-label">${this.escapeHtml(entry.name)}</span>
-      `;
+      const chevron = document.createElement('span');
+      chevron.className = `tree-chevron ${isOpen ? 'open' : ''}`;
+      chevron.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>';
+      item.appendChild(chevron);
+
+      const icon = document.createElement('span');
+      icon.className = 'tree-icon';
+      icon.innerHTML = this.getFolderIcon(entry.name, isOpen);
+      item.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'tree-label';
+      label.textContent = entry.name;
+      item.appendChild(label);
+
       item.addEventListener('click', (e) => {
         e.stopPropagation();
+        this.selectItem(item);
         this.toggleDirectory(entry.path, item);
       });
     } else {
-      item.innerHTML = `
-        <span class="tree-chevron"></span>
-        <span class="tree-icon">${this.getFileIcon(entry.name)}</span>
-        <span class="tree-label">${this.escapeHtml(entry.name)}</span>
-      `;
+      const chevron = document.createElement('span');
+      chevron.className = 'tree-chevron';
+      item.appendChild(chevron);
+
+      const icon = document.createElement('span');
+      icon.className = 'tree-icon';
+      icon.innerHTML = this.getFileIcon(entry.name);
+      item.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'tree-label';
+      label.textContent = entry.name;
+      item.appendChild(label);
+
+      const sizeEl = document.createElement('span');
+      sizeEl.className = 'tree-meta';
+      sizeEl.textContent = this.formatSize(entry.size);
+      item.appendChild(sizeEl);
+
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         this.selectItem(item);
         if (this.onFileOpen) this.onFileOpen(entry.path, entry.name);
       });
     }
+
+    item.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      if (!this.renameInProgress) {
+        this.startInlineRename(item, entry);
+      }
+    });
 
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -95,6 +142,60 @@ class FileExplorer {
     }
 
     return item;
+  }
+
+  startInlineRename(item, entry) {
+    if (this.renameInProgress) return;
+    this.renameInProgress = true;
+
+    const label = item.querySelector('.tree-label');
+    const oldName = entry.name;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tree-rename-input';
+    input.value = oldName;
+
+    const ext = oldName.lastIndexOf('.');
+    label.replaceWith(input);
+    input.focus();
+    if (ext > 0 && entry.type !== 'directory') {
+      input.setSelectionRange(0, ext);
+    } else {
+      input.select();
+    }
+
+    const finishRename = async () => {
+      const newName = input.value.trim();
+      this.renameInProgress = false;
+
+      if (!newName || newName === oldName) {
+        const newLabel = document.createElement('span');
+        newLabel.className = 'tree-label';
+        newLabel.textContent = oldName;
+        input.replaceWith(newLabel);
+        return;
+      }
+
+      const parentPath = this.getParentPath(entry.path);
+      const newPath = parentPath.replace(/\/$/, '') + '/' + newName;
+      try {
+        await this.connection.renameFile(entry.path, newPath);
+        await this.refreshDirectory(parentPath);
+        window.app.notify(`Renamed to ${newName}`, 'success');
+      } catch (err) {
+        window.app.notify(`Rename failed: ${err.message}`, 'error');
+        const newLabel = document.createElement('span');
+        newLabel.className = 'tree-label';
+        newLabel.textContent = oldName;
+        input.replaceWith(newLabel);
+      }
+    };
+
+    input.addEventListener('blur', finishRename);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') { input.value = oldName; input.blur(); }
+    });
   }
 
   selectItem(item) {
@@ -133,6 +234,12 @@ class FileExplorer {
     }
   }
 
+  collapseAll() {
+    this.expandedPaths.clear();
+    this.expandedPaths.add(this.rootPath);
+    this.refresh();
+  }
+
   async refreshDirectory(path) {
     const items = this.container.querySelectorAll(`.tree-item[data-path="${CSS.escape(path)}"]`);
     if (items.length > 0) {
@@ -148,6 +255,8 @@ class FileExplorer {
         item.after(childContainer);
         await this.renderDirectory(path, childContainer, depth + 1);
       }
+    } else {
+      await this.refresh();
     }
   }
 
@@ -160,6 +269,13 @@ class FileExplorer {
   toggleHidden() {
     this.showHidden = !this.showHidden;
     this.refresh();
+  }
+
+  formatSize(bytes) {
+    if (!bytes || bytes === 0) return '';
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}K`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
   }
 
   getFileIcon(name) {
@@ -195,6 +311,7 @@ class FileExplorer {
       '.git': '#f05133', '.github': '#6e7681', '.vscode': '#007acc',
       'public': '#ffca28', 'assets': '#ffca28', 'static': '#ffca28',
       'config': '#78909c', 'docs': '#42a5f5', 'scripts': '#66bb6a',
+      'css': '#563d7c', 'js': '#f1e05a', 'proxy': '#68a063',
     };
     const color = specialFolders[name.toLowerCase()] || '#dcb67a';
     if (isOpen) {

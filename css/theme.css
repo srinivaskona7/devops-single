@@ -307,15 +307,15 @@ html, body {
 .tree-item {
   display: flex;
   align-items: center;
-  height: 26px;
-  padding-left: calc(var(--depth, 0) * 16px + 10px);
-  padding-right: 10px;
+  height: 24px;
+  padding-left: 8px;
+  padding-right: 8px;
   cursor: pointer;
   user-select: none;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
   white-space: nowrap;
-  border-radius: var(--radius-sm);
-  margin: 1px 0;
+  margin: 0;
+  position: relative;
 }
 .tree-item:hover {
   background: var(--bg-hover);
@@ -325,8 +325,9 @@ html, body {
 }
 .tree-item.selected {
   background: var(--bg-active);
-  border-left: 2px solid var(--accent);
-  padding-left: calc(var(--depth, 0) * 16px + 8px);
+}
+.tree-indent {
+  flex-shrink: 0;
 }
 .tree-chevron {
   width: 16px;
@@ -348,7 +349,7 @@ html, body {
 .tree-icon {
   width: 16px;
   height: 16px;
-  margin-right: 6px;
+  margin-right: 5px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -364,10 +365,49 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 400;
+  flex: 1;
 }
-.tree-item.directory > .tree-label {
+.tree-item.directory .tree-label {
   color: var(--text-bright);
   font-weight: 500;
+}
+.tree-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  padding-left: 8px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.tree-item:hover .tree-meta {
+  opacity: 1;
+}
+.tree-rename-input {
+  flex: 1;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent);
+  color: var(--text-bright);
+  padding: 1px 4px;
+  margin: 0;
+  outline: none;
+  border-radius: 2px;
+  height: 20px;
+}
+.tree-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 4px 8px;
+  user-select: none;
+}
+.tree-error {
+  color: var(--accent-red);
+  font-size: 12px;
+}
+.tree-children {
+  position: relative;
 }
 
 /* ═══════════════════ SIDEBAR PANELS ═══════════════════ */

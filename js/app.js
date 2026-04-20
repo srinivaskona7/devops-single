@@ -384,6 +384,10 @@ class App {
       this.fileExplorer.refresh();
     });
 
+    document.getElementById('btn-collapse-all')?.addEventListener('click', () => {
+      this.fileExplorer.collapseAll();
+    });
+
     document.getElementById('btn-toggle-hidden').addEventListener('click', () => {
       this.fileExplorer.toggleHidden();
     });
