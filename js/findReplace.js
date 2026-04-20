@@ -223,7 +223,26 @@
 
       this._wireEvents();
       this._wireGlobalKeys();
+      this._overrideMonacoFind();
       this._initialized = true;
+    }
+
+    _overrideMonacoFind() {
+      const self = this;
+      const tryOverride = () => {
+        const editor = self._getEditor();
+        if (!editor || typeof monaco === 'undefined') return false;
+        try {
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => self.openFind());
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => self.openFindReplace());
+        } catch (_) {}
+        return true;
+      };
+      if (!tryOverride()) {
+        this._monacoOverrideTimer = setInterval(() => {
+          if (tryOverride()) clearInterval(self._monacoOverrideTimer);
+        }, 1000);
+      }
     }
 
     _getEditor() {
@@ -347,12 +366,6 @@
         this.findInput.focus();
         return;
       }
-
-      // Disable Monaco's built-in find widget
-      try {
-        this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => this.openFind());
-        this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => this.openFindReplace());
-      } catch (_) {}
 
       // Pre-fill with current selection if any
       const sel = this.editor.getSelection();
@@ -626,6 +639,10 @@
     }
 
     dispose() {
+      if (this._monacoOverrideTimer) {
+        clearInterval(this._monacoOverrideTimer);
+        this._monacoOverrideTimer = null;
+      }
       if (this._keydownHandler) {
         document.removeEventListener('keydown', this._keydownHandler, true);
         this._keydownHandler = null;
