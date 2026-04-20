@@ -322,9 +322,11 @@
         const ctrl = ev.ctrlKey || ev.metaKey;
         if (ctrl && !ev.shiftKey && !ev.altKey && (ev.key === 'f' || ev.key === 'F')) {
           ev.preventDefault();
+          ev.stopImmediatePropagation();
           this.openFind();
         } else if (ctrl && !ev.shiftKey && !ev.altKey && (ev.key === 'h' || ev.key === 'H')) {
           ev.preventDefault();
+          ev.stopImmediatePropagation();
           this.openFindReplace();
         } else if (ev.key === 'Escape' && this._isVisible()) {
           // Only close if focus is within the panel
