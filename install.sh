@@ -680,44 +680,44 @@ build_kyma_from_source() {
   install_docker
   install_git
 
-  local KYMA_SRC="/tmp/kyma-dashboard-build"
+  local KYMA_SRC="${INSTALL_DIR}/kyma-dashboard"
 
-  if [ -f "${INSTALL_DIR}/build-kyma.sh" ]; then
-    info "Running build script from ${INSTALL_DIR}/build-kyma.sh..."
-    bash "${INSTALL_DIR}/build-kyma.sh"
-    return
-  fi
-
-  info "Cloning Kyma Dashboard source..."
-  rm -rf "${KYMA_SRC}"
-  git clone https://github.com/srinivaskona7/kyma-dashboard.git "${KYMA_SRC}" 2>/dev/null || {
-    warn "Kyma dashboard repo not found. Using embedded build..."
+  if [ ! -d "${KYMA_SRC}/backend" ]; then
+    warn "Kyma Dashboard source not found at ${KYMA_SRC}"
+    warn "Run 'git pull' in ${INSTALL_DIR} first to get the source"
     _build_kyma_embedded
     return
-  }
+  fi
 
   cd "${KYMA_SRC}"
-  if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
-    warn "Invalid dashboard source structure"
-    _build_kyma_embedded
-    return
-  fi
 
   info "Building backend image with DEV_SKIP_AUTH=true..."
-  docker build -f backend/Dockerfile -t "${REPO}:kyma-backend-${TAG}" .
+  docker build -f backend/Dockerfile -t "${REPO}:kyma-backend-${TAG}" . 2>&1 | tail -5
   configured "Kyma Backend image"
 
   info "Building frontend image with VITE_SKIP_AUTH=true..."
   docker build -f frontend/Dockerfile \
     --build-arg VITE_SKIP_AUTH=true \
-    -t "${REPO}:kyma-frontend-${TAG}" .
+    -t "${REPO}:kyma-frontend-${TAG}" . 2>&1 | tail -5
   configured "Kyma Frontend image"
 
   docker stop kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
   docker rm kyma-manager-backend kyma-manager-frontend 2>/dev/null || true
   deploy_kyma_docker
 
-  rm -rf "${KYMA_SRC}"
+  echo ""
+  read -rp "  Push images to Docker Hub? (yes/no): " PUSH_CHOICE
+  if [ "$PUSH_CHOICE" = "yes" ]; then
+    info "Login to Docker Hub (username: sriniv7654)..."
+    docker login -u sriniv7654
+    docker push "${REPO}:kyma-backend-${TAG}"
+    docker push "${REPO}:kyma-frontend-${TAG}"
+    configured "Images pushed to Docker Hub"
+  fi
+
+  # Cleanup dangling images from build
+  docker image prune -f 2>/dev/null || true
+
   log "Kyma Dashboard built and deployed (auth bypassed)"
 }
 
@@ -737,7 +737,56 @@ _build_kyma_embedded() {
 
   deploy_kyma_docker
   warn "Using pre-built images — Keycloak login may still appear"
-  warn "To fix: clone kyma-dashboard repo and rebuild with VITE_SKIP_AUTH=true"
+  warn "To fix: run option 5 again after git pull brings kyma-dashboard/ source"
+}
+
+# ─── Cleanup ──────────────────────────────────────────────
+post_install_cleanup() {
+  echo -e "\n${BOLD}  Post-installation cleanup...${NC}\n"
+
+  if [ "$HAS_DOCKER" = "yes" ]; then
+    local DANGLING
+    DANGLING=$(docker images -f "dangling=true" -q 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$DANGLING" -gt 0 ]; then
+      docker image prune -f 2>/dev/null
+      configured "Removed ${DANGLING} dangling Docker images"
+    else
+      no_change "No dangling Docker images"
+    fi
+
+    local UNUSED_VOLUMES
+    UNUSED_VOLUMES=$(docker volume ls -f "dangling=true" -q 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$UNUSED_VOLUMES" -gt 0 ]; then
+      read -rp "  Remove ${UNUSED_VOLUMES} unused Docker volumes? (yes/no): " VOL_CHOICE
+      if [ "$VOL_CHOICE" = "yes" ]; then
+        docker volume prune -f 2>/dev/null
+        configured "Removed unused volumes"
+      fi
+    else
+      no_change "No unused Docker volumes"
+    fi
+  fi
+
+  if [ -d "/tmp/kyma-dashboard-build" ]; then
+    rm -rf /tmp/kyma-dashboard-build
+    configured "Removed temp build files"
+  fi
+
+  if command -v npm &>/dev/null; then
+    npm cache clean --force 2>/dev/null
+    configured "Cleared npm cache"
+  fi
+
+  if command -v yum &>/dev/null; then
+    sudo yum clean all 2>/dev/null
+    configured "Cleared yum cache"
+  elif command -v apt-get &>/dev/null; then
+    sudo apt-get clean 2>/dev/null
+    configured "Cleared apt cache"
+  fi
+
+  echo ""
+  log "Cleanup complete"
 }
 
 # ─── Menu System ───────────────────────────────────────────
@@ -768,10 +817,11 @@ show_menu() {
     echo -e "  ${BOLD} 9)${NC}  Update to latest version"
     echo -e "  ${BOLD}10)${NC}  View status"
     echo -e "  ${BOLD}11)${NC}  View logs"
-    echo -e "  ${BOLD}12)${NC}  Uninstall"
+    echo -e "  ${BOLD}12)${NC}  Cleanup (remove caches, dangling images)"
+    echo -e "  ${BOLD}13)${NC}  Uninstall"
     echo -e "  ${BOLD} 0)${NC}  Exit"
     echo ""
-    read -rp "  Select option [0-12]: " choice
+    read -rp "  Select option [0-13]: " choice
 
     case "$choice" in
       1)  install_tools; deploy_ide_native; deploy_kyma_docker; show_status ;;
@@ -785,7 +835,8 @@ show_menu() {
       9)  update_all ;;
       10) show_status ;;
       11) view_logs ;;
-      12) uninstall ;;
+      12) post_install_cleanup ;;
+      13) uninstall ;;
       0)  echo -e "\n  ${GREEN}Goodbye!${NC}\n"; exit 0 ;;
       *)  warn "Invalid option" ;;
     esac

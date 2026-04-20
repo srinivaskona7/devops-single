@@ -8,7 +8,7 @@ set -e
 
 REPO="sriniv7654/devops-single"
 TAG="${1:-latest}"
-DASHBOARD_SRC="${DASHBOARD_SRC:-/tmp/kyma-dashboard-src}"
+DASHBOARD_SRC="${DASHBOARD_SRC:-}"
 GIT_DASHBOARD="https://github.com/srinivaskona7/devops-single.git"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
@@ -78,18 +78,31 @@ HEALTHCHECK --interval=15s --timeout=3s --retries=3 \
 CMD ["nginx", "-g", "daemon off;"]
 DOCKERFILE
 
-# ─── Clone Source ──────────────────────────────────────────
-if [ -d "${DASHBOARD_SRC}" ] && [ -f "${DASHBOARD_SRC}/backend/package.json" ]; then
-  info "Using existing source at ${DASHBOARD_SRC}"
+# ─── Find Source ───────────────────────────────────────────
+if [ -z "${DASHBOARD_SRC}" ]; then
+  # Check if we're inside the devops-single repo with kyma-dashboard/
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [ -d "${SCRIPT_DIR}/kyma-dashboard/backend" ]; then
+    DASHBOARD_SRC="${SCRIPT_DIR}/kyma-dashboard"
+  elif [ -d "/opt/cloud-ide/kyma-dashboard/backend" ]; then
+    DASHBOARD_SRC="/opt/cloud-ide/kyma-dashboard"
+  fi
+fi
+
+if [ -n "${DASHBOARD_SRC}" ] && [ -d "${DASHBOARD_SRC}/backend" ]; then
+  info "Using source at ${DASHBOARD_SRC}"
   cd "${DASHBOARD_SRC}"
-  git pull 2>/dev/null || true
 else
-  info "Cloning Kyma Dashboard source..."
-  rm -rf "${DASHBOARD_SRC}"
-  git clone https://github.com/srinivaskona7/kyma-dashboard.git "${DASHBOARD_SRC}" 2>/dev/null \
-    || git clone https://github.com/srinivaskona7/devops-single.git "${DASHBOARD_SRC}" 2>/dev/null \
-    || { err "Failed to clone dashboard source"; exit 1; }
-  cd "${DASHBOARD_SRC}"
+  info "Cloning dashboard source from devops-single repo..."
+  rm -rf /tmp/kyma-dashboard-build
+  git clone --depth 1 "${GIT_DASHBOARD}" /tmp/kyma-dashboard-build
+  if [ -d "/tmp/kyma-dashboard-build/kyma-dashboard/backend" ]; then
+    DASHBOARD_SRC="/tmp/kyma-dashboard-build/kyma-dashboard"
+    cd "${DASHBOARD_SRC}"
+  else
+    err "Dashboard source not found in repo"
+    exit 1
+  fi
 fi
 
 # Check if dashboard source structure exists

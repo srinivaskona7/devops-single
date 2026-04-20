@@ -1,0 +1,13 @@
+{
+  "lastProfiledAt": "2026-03-26T06:10:06.818Z",
+  "depsHash": "ee0d9ef0f178a2ba",
+  "configFiles": [
+    "package.json",
+    "tsconfig.json",
+    "vite.config.ts",
+    "Dockerfile"
+  ],
+  "directories": [
+    "src"
+  ]
+}

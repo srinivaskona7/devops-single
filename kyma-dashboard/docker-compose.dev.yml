@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: backend-builder # Use builder stage to have all devDeps
+    environment:
+      NODE_ENV: development
+      DEV_SKIP_AUTH: "true"
+    volumes:
+      - ./backend:/build
+      - /build/node_modules # Don't overwrite container modules
+    command: npm run dev
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8100/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: builder # Use builder stage for Vite dev server
+    environment:
+      NODE_ENV: development
+      # Vite config reads this at startup to set the proxy target (Docker service name)
+      VITE_BACKEND_URL: http://backend:8100
+      VITE_SKIP_AUTH: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173" # Vite dev port
+    command: npm run dev
+    depends_on:
+      backend:
+        condition: service_healthy

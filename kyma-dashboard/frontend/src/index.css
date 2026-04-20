@@ -1,0 +1,530 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 21px; /* increased 5% from 20px */
+  }
+  :root {
+    --sidebar-width: 280px;
+    --font-size-base: 1rem;
+    --shell-bar-height: 64px;
+    /* Theme tokens — overridden at runtime by ThemeContext */
+    --bg-base: #060d1f;
+    --bg-sidebar: #080f20;
+    --bg-card: #0c1828;
+    --bg-card-hover: #0f2035;
+    --accent: #4f7eff;
+    --accent-hover: #7097ff;
+    --text-primary: #edf2ff;
+    --text-secondary: #94a3b8;
+    --text-muted: #475569;
+    --border: rgba(79,126,255,0.14);
+    --border-strong: rgba(79,126,255,0.3);
+    --status-ok: #10b981;
+    --status-warn: #f59e0b;
+    --status-err: #ef4444;
+    /* Glow tokens */
+    --glow-accent: rgba(79,126,255,0.18);
+    --glow-ok: rgba(16,185,129,0.18);
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25);
+    --shadow-card-hover: 0 2px 8px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(79,126,255,0.2);
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Sora', system-ui, sans-serif;
+    font-size: var(--font-size-base);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    /* Subtle background noise for depth */
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  html, body, #root { height: 100%; overflow: hidden; }
+  /* Distinctive mono font for all code/data elements */
+  code, pre, .font-mono, [class*="font-mono"] {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #040a18; }
+  ::-webkit-scrollbar-thumb { background: #1a3055; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2a4a7f; }
+
+  /* Animated pulse for live status dots */
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
+    50% { opacity: 0.85; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+}
+
+@layer components {
+  .k-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 220ms ease, border-color 220ms ease, transform 220ms ease;
+    @apply rounded-xl p-7;
+  }
+  .k-card:hover {
+    box-shadow: var(--shadow-card-hover);
+    border-color: rgba(79,126,255,0.22);
+  }
+
+  /* Page entry animation — apply to main content containers */
+  .k-page-enter {
+    animation: fade-up 280ms ease both;
+  }
+  .k-page-enter > * {
+    animation: fade-up 280ms ease both;
+  }
+  .k-page-enter > *:nth-child(1)  { animation-delay: 0ms; }
+  .k-page-enter > *:nth-child(2)  { animation-delay: 40ms; }
+  .k-page-enter > *:nth-child(3)  { animation-delay: 80ms; }
+  .k-page-enter > *:nth-child(4)  { animation-delay: 120ms; }
+  .k-page-enter > *:nth-child(5)  { animation-delay: 160ms; }
+
+  .k-table {
+    @apply w-full text-base;
+  }
+  .k-table th {
+    @apply text-left font-semibold text-slate-500 uppercase tracking-wider py-3.5 border-b border-white/5;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+  .k-table td {
+    @apply py-3.5 border-b border-white/[0.03] text-slate-300;
+    transition: background 160ms ease, color 160ms ease;
+  }
+  .k-table tr:hover td {
+    background: rgba(79,126,255,0.05);
+    color: #d4e0ff;
+  }
+  .k-table tr:hover td:first-child {
+    border-left: 2px solid rgba(79,126,255,0.4);
+    padding-left: calc(theme(spacing[4]) - 2px);
+  }
+  /* Action menu button — hidden until row hover */
+  .k-table tr .row-actions { @apply opacity-0 transition-opacity; }
+  .k-table tr:hover .row-actions { @apply opacity-100; }
+
+  /* Live status dot — animated pulse */
+  .status-dot-live {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+    animation: pulse-dot 2s ease-in-out infinite;
+    display: inline-block;
+  }
+
+  .kyma-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    font-family: 'Sora', system-ui, sans-serif;
+    letter-spacing: 0.01em;
+  }
+  .badge-ok {
+    @apply kyma-badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/25;
+  }
+  .badge-warn {
+    @apply kyma-badge bg-amber-500/10 text-amber-400 border border-amber-500/25;
+  }
+  .badge-err {
+    @apply kyma-badge bg-red-500/10 text-red-400 border border-red-500/25;
+  }
+  .badge-info {
+    @apply kyma-badge bg-blue-500/10 text-blue-400 border border-blue-500/25;
+  }
+  .section-title {
+    @apply text-sm font-bold text-slate-200 flex items-center gap-2.5 pb-4 mb-5 border-b border-[rgba(79,126,255,0.14)];
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .section-title::before {
+    content: '';
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: linear-gradient(to bottom, #4f7eff, #7c3aed);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  /* Primary CTA button — exec/apply — stands out */
+  .btn-primary-cta {
+    @apply flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white transition-all;
+    background: linear-gradient(135deg, #4f7eff 0%, #6d5aff 100%);
+    box-shadow: 0 0 0 0 rgba(79,126,255,0.4), 0 2px 8px rgba(79,126,255,0.25);
+    transition: box-shadow 180ms ease, transform 120ms ease;
+  }
+  .btn-primary-cta:hover {
+    box-shadow: 0 0 0 3px rgba(79,126,255,0.25), 0 4px 16px rgba(79,126,255,0.35);
+    transform: translateY(-1px);
+  }
+  .btn-primary-cta:active { transform: translateY(0); }
+}
+
+/* Xterm overrides */
+.xterm { padding: 8px; }
+.xterm-viewport::-webkit-scrollbar { width: 5px; }
+.xterm-viewport::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 4px; }
+
+/* Monaco overrides */
+.monaco-editor .margin { background: #0d1b2e !important; }
+
+/* ============================================================
+   SAP Horizon Light theme overrides
+   Active when <html class="theme-sap-horizon"> is set
+   ============================================================ */
+
+/* ── 1. Base layer: page background, font, body ── */
+.theme-sap-horizon,
+.theme-sap-horizon body,
+.theme-sap-horizon #root,
+.theme-sap-horizon #root > div {
+  font-family: "72", "Sora", Arial, Helvetica, sans-serif !important;
+  font-size: 16px !important;
+  background-color: #f5f6f7 !important;
+  color: #32363a !important;
+}
+
+/* Scrollbar — neutral */
+.theme-sap-horizon ::-webkit-scrollbar-track { background: #f5f6f7; }
+.theme-sap-horizon ::-webkit-scrollbar-thumb { background: #c8cbd0; border-radius: 4px; }
+.theme-sap-horizon ::-webkit-scrollbar-thumb:hover { background: #89919a; }
+
+/* ── 2. Shell bar (top navbar) — stays dark navy ── */
+.theme-sap-horizon header {
+  background: #1d2d3e !important;
+  border-bottom: none !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3) !important;
+}
+.theme-sap-horizon header *:not(input):not(textarea) {
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,0.15) !important;
+}
+.theme-sap-horizon header input,
+.theme-sap-horizon header textarea {
+  background: rgba(255,255,255,0.1) !important;
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,0.2) !important;
+}
+.theme-sap-horizon header input::placeholder { color: rgba(255,255,255,0.55) !important; }
+/* Keep CPU/MEM progress bars */
+.theme-sap-horizon header [class*="rounded-full"] { background-color: rgba(255,255,255,0.15) !important; }
+
+/* ── 3. Sidebar — white, Kyma-style ── */
+.theme-sap-horizon aside {
+  background: #ffffff !important;
+  border-right: 1px solid #d9d9d9 !important;
+}
+/* All sidebar text dark */
+.theme-sap-horizon aside span,
+.theme-sap-horizon aside a,
+.theme-sap-horizon aside button,
+.theme-sap-horizon aside div { color: #32363a !important; }
+/* Cluster selector pill */
+.theme-sap-horizon aside > div:first-child { border-bottom: 1px solid #e5e5e5 !important; background: #f5f6f7 !important; }
+/* Active nav link */
+.theme-sap-horizon aside a[class*="text-indigo"],
+.theme-sap-horizon aside a[class*="border-indigo"] {
+  background: #e7f0f7 !important;
+  color: #0070f2 !important;
+  border-left-color: #0070f2 !important;
+}
+.theme-sap-horizon aside a[class*="text-indigo"] * { color: #0070f2 !important; }
+/* Hover */
+.theme-sap-horizon aside a:hover { background: #f2f2f2 !important; }
+/* Section headers */
+.theme-sap-horizon aside [class*="text-slate-6"],
+.theme-sap-horizon aside [class*="text-slate-5"] { color: #89919a !important; }
+/* Sidebar namespace selector dropdown */
+.theme-sap-horizon aside select {
+  background: #ffffff !important;
+  color: #32363a !important;
+  border: 1px solid #d9d9d9 !important;
+}
+
+/* ── 4. Main content area ── */
+.theme-sap-horizon main,
+.theme-sap-horizon main > * { background-color: transparent !important; }
+
+/* ── 5. All hardcoded dark backgrounds → white/transparent (EXCLUDE header) ── */
+/* Override all hardcoded Tailwind dark bg colors — NOT in header */
+.theme-sap-horizon main [class*="bg-[#060d1f]"],
+.theme-sap-horizon main [class*="bg-[#0a1628]"],
+.theme-sap-horizon main [class*="bg-[#0d1b2e]"],
+.theme-sap-horizon main [class*="bg-[#0f2035]"],
+.theme-sap-horizon aside [class*="bg-[#060d1f]"],
+.theme-sap-horizon aside [class*="bg-[#0a1628]"],
+.theme-sap-horizon aside [class*="bg-[#0d1b2e]"] {
+  background-color: #ffffff !important;
+}
+/* white/5 overlays → neutral (NOT in header) */
+.theme-sap-horizon main [class*="bg-white/5"],
+.theme-sap-horizon main [class*="bg-white/[0.02]"],
+.theme-sap-horizon main [class*="bg-white/[0.04]"],
+.theme-sap-horizon main [class*="bg-white/10"],
+.theme-sap-horizon aside [class*="bg-white/5"],
+.theme-sap-horizon aside [class*="bg-white/10"] { background-color: #f2f4f7 !important; }
+
+/* ── 6. Text colors ── */
+/* White text → dark (NOT inside header, NOT on dark badges) */
+.theme-sap-horizon main .text-white,
+.theme-sap-horizon aside .text-white,
+.theme-sap-horizon [class*="text-white"]:not(header *):not([class*="badge"]):not([class*="bg-indigo-6"]):not([class*="bg-red-6"]) {
+  color: #32363a !important;
+}
+/* Slate text scale */
+.theme-sap-horizon .text-slate-100,
+.theme-sap-horizon .text-slate-200,
+.theme-sap-horizon .text-slate-300 { color: #32363a !important; }
+.theme-sap-horizon .text-slate-400 { color: #556b82 !important; }
+.theme-sap-horizon .text-slate-500,
+.theme-sap-horizon .text-slate-600 { color: #89919a !important; }
+/* Indigo text → SAP blue */
+.theme-sap-horizon .text-indigo-400,
+.theme-sap-horizon .text-indigo-300,
+.theme-sap-horizon .text-indigo-200 { color: #0070f2 !important; }
+/* Amber/emerald stays */
+.theme-sap-horizon .text-amber-400 { color: #e76500 !important; }
+.theme-sap-horizon .text-emerald-400 { color: #107e3e !important; }
+.theme-sap-horizon .text-red-400 { color: #bb0000 !important; }
+.theme-sap-horizon .text-cyan-400 { color: #0070f2 !important; }
+
+/* ── 7. Headings ── */
+.theme-sap-horizon h1, .theme-sap-horizon h2,
+.theme-sap-horizon h3, .theme-sap-horizon h4,
+.theme-sap-horizon h5, .theme-sap-horizon h6 { color: #32363a !important; }
+/* Font-mono text — use SAP blue for identifiers, not black */
+.theme-sap-horizon [class*="font-mono"] { color: #0070f2 !important; }
+/* But table cell mono (pod names etc) → slightly softer blue */
+.theme-sap-horizon .k-table [class*="font-mono"],
+.theme-sap-horizon table [class*="font-mono"] { color: #0058c7 !important; }
+
+/* ── 8. Inputs, selects, textareas ── */
+.theme-sap-horizon main input,
+.theme-sap-horizon main select,
+.theme-sap-horizon main textarea {
+  background-color: #ffffff !important;
+  color: #32363a !important;
+  border-color: #89919a !important;
+}
+.theme-sap-horizon main input::placeholder,
+.theme-sap-horizon main textarea::placeholder { color: #89919a !important; }
+.theme-sap-horizon main input:focus,
+.theme-sap-horizon main select:focus { border-color: #0070f2 !important; outline: none !important; }
+
+/* ── 9. Cards ── */
+.theme-sap-horizon .k-card {
+  background: #ffffff !important;
+  border: 1px solid #d9d9d9 !important;
+  box-shadow: 0 0 0.125rem rgba(34,53,72,0.10), 0 0.5rem 1rem rgba(34,53,72,0.15) !important;
+  border-radius: 16px !important;
+}
+/* Card inner backgrounds */
+.theme-sap-horizon .k-card [class*="bg-[#060d1f]"],
+.theme-sap-horizon .k-card [class*="bg-[#0a1628]"],
+.theme-sap-horizon .k-card [class*="bg-[#0d1b2e]"] { background-color: #f5f6f7 !important; }
+
+/* ── 10. Tables ── */
+.theme-sap-horizon .k-table { background: #ffffff !important; }
+.theme-sap-horizon .k-table th,
+.theme-sap-horizon table thead th {
+  background: #f2f4f7 !important;
+  color: #556b82 !important;
+  font-family: "72-SemiboldDuplex", "72", Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid #d9d9d9 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  padding: 8px 12px !important;
+}
+.theme-sap-horizon .k-table td,
+.theme-sap-horizon table tbody td {
+  color: #32363a !important;
+  font-family: "72", Arial, sans-serif !important;
+  font-size: 16px !important;
+  border-bottom: 1px solid #e5e5e5 !important;
+  background: #ffffff !important;
+  padding: 10px 12px !important;
+}
+.theme-sap-horizon .k-table tr:hover td,
+.theme-sap-horizon table tbody tr:hover td { background: #e7f0f7 !important; }
+
+/* ── 11. Section titles ── */
+.theme-sap-horizon .section-title {
+  color: #32363a !important;
+  border-bottom-color: #d9d9d9 !important;
+  font-family: "72-SemiboldDuplex", "72", Arial, sans-serif !important;
+}
+.theme-sap-horizon .section-title::before { background: #0070f2 !important; }
+
+/* ── 12. Badges ── */
+.theme-sap-horizon .kyma-badge {
+  font-family: "72", Arial, sans-serif !important;
+  font-size: 13.5px !important;
+  background: #f2f4f7 !important;
+  color: #32363a !important;
+  border-color: #d9d9d9 !important;
+}
+.theme-sap-horizon .badge-ok {
+  background: rgba(16,126,62,0.1) !important;
+  color: #107e3e !important;
+  border-color: rgba(16,126,62,0.35) !important;
+}
+.theme-sap-horizon .badge-warn {
+  background: rgba(231,101,0,0.1) !important;
+  color: #e76500 !important;
+  border-color: rgba(231,101,0,0.35) !important;
+}
+.theme-sap-horizon .badge-err {
+  background: rgba(187,0,0,0.1) !important;
+  color: #bb0000 !important;
+  border-color: rgba(187,0,0,0.35) !important;
+}
+.theme-sap-horizon .badge-info {
+  background: rgba(0,112,242,0.1) !important;
+  color: #0070f2 !important;
+  border-color: rgba(0,112,242,0.3) !important;
+}
+
+/* ── 13. Buttons ── */
+/* Primary filled buttons → SAP blue */
+.theme-sap-horizon button[class*="bg-indigo-6"],
+.theme-sap-horizon button[class*="bg-indigo-5"],
+.theme-sap-horizon [class*="bg-indigo-600"],
+.theme-sap-horizon [class*="bg-indigo-500"] {
+  background-color: #0070f2 !important;
+  color: #ffffff !important;
+}
+.theme-sap-horizon [class*="hover:bg-indigo"]:hover { background-color: #0064d9 !important; }
+/* Ghost/outline buttons — light blue text & border instead of black */
+.theme-sap-horizon main button[class*="bg-white/5"],
+.theme-sap-horizon main button[class*="bg-white/10"],
+.theme-sap-horizon main button[class*="bg-white/["] {
+  background-color: #e8f1fb !important;
+  color: #0070f2 !important;
+  border-color: rgba(0,112,242,0.3) !important;
+}
+.theme-sap-horizon main button[class*="bg-white/5"]:hover,
+.theme-sap-horizon main button[class*="bg-white/10"]:hover,
+.theme-sap-horizon main button[class*="bg-white/["]:hover {
+  background-color: #d1e5f9 !important;
+  border-color: rgba(0,112,242,0.5) !important;
+}
+/* Any button with slate/text-slate text → SAP blue */
+.theme-sap-horizon main button,
+.theme-sap-horizon main [role="button"] {
+  color: #0070f2 !important;
+}
+/* Red/danger buttons in main */
+.theme-sap-horizon main button[class*="bg-red"] {
+  background-color: rgba(187,0,0,0.1) !important;
+  color: #bb0000 !important;
+  border-color: rgba(187,0,0,0.35) !important;
+}
+/* Pure icon buttons (no bg) — slate icons → SAP blue */
+.theme-sap-horizon main button[class*="text-slate-"] {
+  color: #0070f2 !important;
+}
+.theme-sap-horizon main button[class*="text-slate-"]:hover {
+  color: #0058c7 !important;
+}
+/* ⚠️ HEADER buttons — always white on dark navy — override everything */
+.theme-sap-horizon header button,
+.theme-sap-horizon header button *,
+.theme-sap-horizon header [role="button"],
+.theme-sap-horizon header [role="button"] * {
+  color: #ffffff !important;
+  background-color: transparent !important;
+  border-color: rgba(255,255,255,0.2) !important;
+}
+/* Header cluster selector pill */
+.theme-sap-horizon header [class*="bg-white/5"],
+.theme-sap-horizon header [class*="bg-white/10"] {
+  background-color: rgba(255,255,255,0.08) !important;
+}
+.theme-sap-horizon header [class*="bg-white/5"]:hover,
+.theme-sap-horizon header [class*="bg-white/10"]:hover {
+  background-color: rgba(255,255,255,0.15) !important;
+}
+/* Header Run button stays SAP blue */
+.theme-sap-horizon header button[class*="bg-indigo-6"],
+.theme-sap-horizon header button[class*="bg-indigo-5"] {
+  background-color: #0070f2 !important;
+  color: #ffffff !important;
+}
+/* Header text-slate-400 → white */
+.theme-sap-horizon header [class*="text-slate-"] { color: rgba(255,255,255,0.8) !important; }
+/* CPU/MEM progress bar track in header */
+.theme-sap-horizon header [class*="bg-white/5"][class*="rounded-full"],
+.theme-sap-horizon header [class*="h-1.5"] { background-color: rgba(255,255,255,0.15) !important; }
+/* Expiry badge in header */
+.theme-sap-horizon header [class*="bg-emerald"],
+.theme-sap-horizon header [class*="bg-amber"],
+.theme-sap-horizon header [class*="bg-red-5"] { color: #ffffff !important; }
+
+/* ── 14. Borders override ── */
+.theme-sap-horizon [class*="border-[rgba(99,102,241"] { border-color: #d9d9d9 !important; }
+.theme-sap-horizon [class*="border-white/"] { border-color: #e5e5e5 !important; }
+.theme-sap-horizon [class*="divide-white/"] > * + * { border-color: #e5e5e5 !important; }
+
+/* ── 15. Indigo backgrounds → SAP blue light ── */
+.theme-sap-horizon [class*="bg-indigo-500/10"],
+.theme-sap-horizon [class*="bg-indigo-500/15"] {
+  background-color: rgba(0,112,242,0.1) !important;
+  color: #0070f2 !important;
+}
+.theme-sap-horizon [class*="border-indigo-500"] { border-color: rgba(0,112,242,0.35) !important; }
+
+/* ── 15b. Smooth hover transitions ── */
+.theme-sap-horizon a,
+.theme-sap-horizon button,
+.theme-sap-horizon tr,
+.theme-sap-horizon [role="button"],
+.theme-sap-horizon aside a,
+.theme-sap-horizon aside button {
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease !important;
+}
+
+/* ── 16. Focus ring ── */
+.theme-sap-horizon *:focus-visible {
+  outline: 2px solid #0070f2 !important;
+  outline-offset: 2px !important;
+}
+
+/* ── 17. Monaco editor — keep dark for readability ── */
+.theme-sap-horizon .monaco-editor { background: #f8f9fa !important; }
+.theme-sap-horizon .monaco-editor .margin { background: #f2f4f7 !important; }
+
+/* ── 18. Log output terminal ── */
+.theme-sap-horizon pre[class*="font-mono"] {
+  background: #1d2d3e !important;
+  color: #c8f0a0 !important;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+/* ── 19. Stat/metric cards in ClusterOverview — use SAP blue for big numbers ── */
+.theme-sap-horizon [class*="text-3xl"],
+.theme-sap-horizon [class*="text-5xl"][class*="font-black"] { color: #0070f2 !important; }
+.theme-sap-horizon [class*="text-2xl"],
+.theme-sap-horizon [class*="text-xl"][class*="font-black"] { color: #32363a !important; }
+
+/* ── 20. Pagination & misc ── */
+.theme-sap-horizon [class*="text-slate"][class*="text-xs"] { color: #556b82 !important; }
+.theme-sap-horizon button:disabled { opacity: 0.4 !important; }

@@ -1,0 +1,9 @@
+node_modules
+dist
+.env*
+*.log
+*.md
+.git
+.DS_Store
+src/**/*.test.*
+src/**/*.spec.*
