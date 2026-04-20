@@ -47,7 +47,7 @@ class App {
     const doAuth = () => {
       const user = document.getElementById('auth-username').value.trim();
       const pass = document.getElementById('auth-password').value;
-      if (user === 'admin' && pass === 'sri@123') {
+      if ((user === 'admin' && pass === 'sri@123') || (user === 'root' && pass === 'root@123')) {
         this.authenticated = true;
         document.getElementById('auth-screen').style.display = 'none';
         document.getElementById('home-screen').style.display = '';
@@ -222,6 +222,11 @@ class App {
         }
       }
     } catch {}
+    
+    if (!document.getElementById('proxy-url').value) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      document.getElementById('proxy-url').value = protocol + '//' + window.location.host;
+    }
   }
 
   showIDE() {
