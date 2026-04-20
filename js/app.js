@@ -446,6 +446,7 @@ class App {
           btn.classList.add('active');
           const targetPanel = document.getElementById(`panel-${panel}`);
           if (targetPanel) targetPanel.classList.add('active');
+          this.autoRefreshPanel(panel);
         }
 
         setTimeout(() => {
@@ -488,6 +489,26 @@ class App {
         this.hideContextMenu();
       });
     });
+  }
+
+  autoRefreshPanel(panel) {
+    const map = {
+      docker: this.dockerPanel,
+      git: this.gitPanel,
+      k8s: this.k8sPanel,
+      helm: this.helmPanel,
+      admin: this.linuxAdminPanel,
+      devops: this.devopsPanel,
+      nginx: this.nginxPanel,
+      certs: this.certPanel,
+      logs: this.logViewerPanel,
+      network: this.networkToolsPanel,
+      cicd: this.cicdPanel,
+    };
+    const instance = map[panel];
+    if (instance && typeof instance.refresh === 'function') {
+      instance.refresh();
+    }
   }
 
   bindKeyboardShortcuts() {
