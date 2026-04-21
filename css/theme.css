@@ -1620,3 +1620,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   padding: 8px 12px; color: var(--text-muted);
   font-size: 12px; font-style: italic;
 }
+
+/* ═══════════════════ LINUX ADMIN NAV ═══════════════════ */
+.admin-nav {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 8px;
+  border-bottom: 1px solid var(--bg-tertiary); margin-bottom: 8px;
+}
+.admin-nav-btn {
+  background: var(--bg-tertiary); border: none; color: var(--text-muted);
+  padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;
+  transition: all 0.15s;
+}
+.admin-nav-btn:hover { background: var(--bg-hover, var(--bg-secondary)); color: var(--text-primary); }
+.admin-nav-btn.active { background: var(--accent); color: #fff; }
+.admin-learn {
+  margin-top: 12px; padding: 8px 12px; border-radius: 4px;
+  background: rgba(117, 120, 232, 0.08); border-left: 3px solid var(--accent);
+  font-size: 11px; color: var(--text-muted); line-height: 1.5;
+}
+.admin-learn code {
+  background: var(--bg-tertiary); padding: 1px 4px; border-radius: 2px;
+  font-size: 10px; color: var(--accent-green);
+}
