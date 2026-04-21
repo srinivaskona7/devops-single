@@ -53,18 +53,43 @@ class App {
     const authError = document.getElementById('auth-error');
     if (!authBtn) return;
 
-    const doAuth = () => {
+    const doAuth = async () => {
       const user = document.getElementById('auth-username').value.trim();
       const pass = document.getElementById('auth-password').value;
-      if ((user === 'admin' && pass === 'sri@123') || (user === 'root' && pass === 'root@123')) {
-        this.authenticated = true;
-        document.getElementById('auth-screen').style.display = 'none';
-        document.getElementById('home-screen').style.display = '';
-        document.getElementById('home-user').textContent = user;
-      } else {
+      if (!user || !pass) {
         authError.classList.add('visible');
-        document.getElementById('auth-error-text').textContent = 'Invalid credentials';
+        document.getElementById('auth-error-text').textContent = 'Enter username and password';
+        return;
       }
+      authBtn.disabled = true;
+      authBtn.textContent = 'Signing in...';
+      try {
+        const resp = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user, password: pass }),
+        });
+        const data = await resp.json();
+        if (resp.ok && data.token) {
+          this.authToken = data.token;
+          this.authenticated = true;
+          document.getElementById('auth-screen').style.display = 'none';
+          document.getElementById('home-screen').style.display = '';
+          document.getElementById('home-user').textContent = data.username;
+          authError.classList.remove('visible');
+        } else {
+          authError.classList.add('visible');
+          const msg = data.attemptsRemaining !== undefined
+            ? `${data.error} (${data.attemptsRemaining} attempts left)`
+            : data.error || 'Invalid credentials';
+          document.getElementById('auth-error-text').textContent = msg;
+        }
+      } catch (err) {
+        authError.classList.add('visible');
+        document.getElementById('auth-error-text').textContent = 'Connection failed';
+      }
+      authBtn.disabled = false;
+      authBtn.textContent = 'Sign In';
     };
 
     authBtn.addEventListener('click', doAuth);

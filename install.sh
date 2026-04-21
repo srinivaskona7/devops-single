@@ -306,6 +306,54 @@ health_check() {
   return 1
 }
 
+# ─── Auth Credentials Setup ────────────────────────────────
+setup_auth_credentials() {
+  local AUTH_FILE="${INSTALL_DIR}/.ide-auth.json"
+
+  if [ -f "$AUTH_FILE" ]; then
+    no_change "Auth credentials (${AUTH_FILE})"
+    return
+  fi
+
+  echo ""
+  echo -e "${BOLD}  Set IDE Login Credentials${NC}"
+  echo -e "  ${DIM}(This password protects your IDE from unauthorized access)${NC}"
+  echo ""
+
+  local IDE_USER IDE_PASS IDE_PASS2
+  read -rp "  Username [admin]: " IDE_USER
+  IDE_USER="${IDE_USER:-admin}"
+
+  while true; do
+    read -rsp "  Password (min 6 chars): " IDE_PASS
+    echo ""
+    if [ ${#IDE_PASS} -lt 6 ]; then
+      warn "Password must be at least 6 characters"
+      continue
+    fi
+    read -rsp "  Confirm password: " IDE_PASS2
+    echo ""
+    if [ "$IDE_PASS" != "$IDE_PASS2" ]; then
+      warn "Passwords don't match"
+      continue
+    fi
+    break
+  done
+
+  local HASH
+  HASH=$(echo -n "${IDE_PASS}cloud-ide-salt-2024" | sha256sum | awk '{print $1}')
+
+  cat > "$AUTH_FILE" <<AUTHEOF
+{
+  "users": [
+    { "username": "${IDE_USER}", "hash": "${HASH}" }
+  ]
+}
+AUTHEOF
+
+  configured "Auth credentials set (user: ${IDE_USER})"
+}
+
 # ─── IDE Native Deployment ─────────────────────────────────
 create_systemd_service() {
   local SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -329,6 +377,7 @@ WorkingDirectory=${INSTALL_DIR}
 Environment=PORT=${IDE_PORT}
 Environment=STATIC_DIR=${INSTALL_DIR}
 Environment=NODE_ENV=production
+Environment=MAX_CONNECTIONS=5
 ExecStart=${NODE_BIN} ${INSTALL_DIR}/proxy/server.js
 Restart=on-failure
 RestartSec=5
@@ -413,6 +462,9 @@ deploy_ide_native() {
   sleep 1
   state_check
   start_ide_service
+
+  # Setup auth credentials on first install
+  setup_auth_credentials
 
   health_check "http://localhost:${IDE_PORT}/health" "Cloud IDE"
   echo ""
@@ -668,8 +720,14 @@ show_status() {
   done
 
   echo ""
-  echo -e "${BOLD}  Credentials:${NC}"
-  echo -e "  Username: ${BOLD}admin${NC}    Password: ${BOLD}sri@123${NC}"
+  echo -e "${BOLD}  Access:${NC}"
+  if [ -f "${INSTALL_DIR}/.ide-auth.json" ]; then
+    local AUTH_USER
+    AUTH_USER=$(grep -o '"username": *"[^"]*"' "${INSTALL_DIR}/.ide-auth.json" 2>/dev/null | head -1 | cut -d'"' -f4)
+    echo -e "  Username: ${BOLD}${AUTH_USER:-admin}${NC}    Password: ${DIM}(set during install)${NC}"
+  else
+    echo -e "  Username: ${BOLD}admin${NC}    Password: ${BOLD}sri@123${NC} ${RED}(default — change immediately!)${NC}"
+  fi
   echo ""
 }
 

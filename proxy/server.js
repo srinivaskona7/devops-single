@@ -9,6 +9,65 @@ const crypto = require('crypto');
 const PORT = process.env.PORT || 3456;
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, '..');
 
+// ─── Security Configuration ──────────────────────────────────────────────────
+const AUTH_FILE = path.join(STATIC_DIR, '.ide-auth.json');
+const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS) || 5;
+const MAX_AUTH_ATTEMPTS = 5;
+const AUTH_LOCKOUT_MS = 15 * 60 * 1000;
+const ALLOWED_IPS = (process.env.ALLOWED_IPS || '').split(',').filter(Boolean);
+
+const authAttempts = new Map();
+
+function getAuthConfig() {
+  try {
+    if (fs.existsSync(AUTH_FILE)) {
+      return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
+    }
+  } catch {}
+  return { users: [
+    { username: 'admin', hash: hashPassword('sri@123') }
+  ]};
+}
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password + 'cloud-ide-salt-2024').digest('hex');
+}
+
+function validateAuth(username, password) {
+  const config = getAuthConfig();
+  const hash = hashPassword(password);
+  return config.users.some(u => u.username === username && u.hash === hash);
+}
+
+function isRateLimited(ip) {
+  const entry = authAttempts.get(ip);
+  if (!entry) return false;
+  if (Date.now() - entry.lastAttempt > AUTH_LOCKOUT_MS) {
+    authAttempts.delete(ip);
+    return false;
+  }
+  return entry.count >= MAX_AUTH_ATTEMPTS;
+}
+
+function recordAuthAttempt(ip, success) {
+  if (success) {
+    authAttempts.delete(ip);
+    return;
+  }
+  const entry = authAttempts.get(ip) || { count: 0, lastAttempt: 0 };
+  entry.count++;
+  entry.lastAttempt = Date.now();
+  authAttempts.set(ip, entry);
+}
+
+function isIPAllowed(ip) {
+  if (ALLOWED_IPS.length === 0) return true;
+  const normalized = ip.replace('::ffff:', '');
+  return ALLOWED_IPS.some(allowed => normalized === allowed || normalized === '127.0.0.1' || normalized === '::1');
+}
+
+const activeSessions = new Map();
+
 const MIME = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml',
@@ -47,15 +106,79 @@ function getCachedFile(filePath) {
 }
 
 const httpServer = http.createServer((req, res) => {
+  const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+
+  if (!isIPAllowed(clientIP)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Access denied' }));
+    return;
+  }
+
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('X-Content-Type-Options', 'nosniff');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', version: '2.0.0', uptime: process.uptime() | 0, connections: wss.clients.size }));
+    res.end(JSON.stringify({ status: 'ok', version: '2.1.0', uptime: process.uptime() | 0, connections: wss.clients.size, maxConnections: MAX_CONNECTIONS }));
+    return;
+  }
+
+  if (req.url === '/api/login' && req.method === 'POST') {
+    if (isRateLimited(clientIP)) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Too many attempts. Try again in 15 minutes.' }));
+      return;
+    }
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 1024) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const { username, password } = JSON.parse(body);
+        if (validateAuth(username, password)) {
+          const token = crypto.randomBytes(32).toString('hex');
+          activeSessions.set(token, { username, ip: clientIP, created: Date.now() });
+          recordAuthAttempt(clientIP, true);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ token, username }));
+        } else {
+          recordAuthAttempt(clientIP, false);
+          const entry = authAttempts.get(clientIP);
+          const remaining = MAX_AUTH_ATTEMPTS - (entry?.count || 0);
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid credentials', attemptsRemaining: Math.max(0, remaining) }));
+        }
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid request' }));
+      }
+    });
+    return;
+  }
+
+  if (req.url === '/api/change-password' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { token, oldPassword, newPassword } = JSON.parse(body);
+        const session = activeSessions.get(token);
+        if (!session) { res.writeHead(401); res.end('Unauthorized'); return; }
+        if (!validateAuth(session.username, oldPassword)) { res.writeHead(403); res.end('Wrong password'); return; }
+        if (!newPassword || newPassword.length < 6) { res.writeHead(400); res.end('Password must be 6+ chars'); return; }
+        const config = getAuthConfig();
+        const user = config.users.find(u => u.username === session.username);
+        if (user) user.hash = hashPassword(newPassword);
+        fs.writeFileSync(AUTH_FILE, JSON.stringify(config, null, 2));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch {
+        res.writeHead(400); res.end('Invalid request');
+      }
+    });
     return;
   }
 
@@ -97,6 +220,18 @@ const wss = new Server({
   server: httpServer,
   perMessageDeflate: false,
   maxPayload: 10 * 1024 * 1024,
+  verifyClient: (info, cb) => {
+    const ip = info.req.headers['x-forwarded-for']?.split(',')[0]?.trim() || info.req.socket.remoteAddress || '';
+    if (!isIPAllowed(ip)) {
+      cb(false, 403, 'Access denied');
+      return;
+    }
+    if (wss.clients.size >= MAX_CONNECTIONS) {
+      cb(false, 503, 'Max connections reached');
+      return;
+    }
+    cb(true);
+  },
 });
 
 const PING_INTERVAL = 30000;
@@ -144,6 +279,11 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'auth') {
+      if (msg.token && !activeSessions.has(msg.token)) {
+        send({ type: 'auth:error', message: 'Invalid session. Please re-login.' });
+        return;
+      }
+
       sshClient = new Client();
       const config = {
         host: msg.host,
