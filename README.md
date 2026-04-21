@@ -30,28 +30,52 @@ Complete CI/CD pipeline — clones repo, builds images, pushes to Docker Hub, de
 curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash
 ```
 
+**Fully automated (no prompts — for CI/CD):**
+```bash
+curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash -s -- \
+  --auto \
+  --pass=YOUR_DOCKER_HUB_PASSWORD \
+  --kubeconfig=/path/to/kubeconfig.yaml
+```
+
 **What it does (7 steps):**
 1. Clones the repo to `/opt/cloud-ide`
-2. Prompts for Docker Hub password (username: `sriniv7654`)
+2. Docker Hub login (`--pass=` for automation, or prompts if interactive)
 3. Builds all 3 Docker images from source
 4. Pushes images to Docker Hub with `latest` tag
-5. Prompts for kubeconfig file upload (paste path or skip)
+5. Kubeconfig setup (`--kubeconfig=` for auto, or prompts if interactive)
 6. Deploys containers with persistent volumes (always pulls latest)
-7. Runs health checks and displays access URLs
+7. Auto-generates secure IDE password + health checks + URLs
 
-**With options:**
+**Options:**
 ```bash
 # Custom tag and port
-curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash -s -- --tag=v2 --port=8101
+curl -sSL .../deploy.sh | bash -s -- --tag=v2 --port=8101
 
 # Custom Docker Hub repo
-curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash -s -- --user=myuser --repo=myuser/myrepo
+curl -sSL .../deploy.sh | bash -s -- --user=myuser --repo=myuser/myrepo
 
 # All options
-curl -sSL https://raw.githubusercontent.com/srinivaskona7/devops-single/main/deploy.sh | bash -s -- \
+curl -sSL .../deploy.sh | bash -s -- \
+  --auto \
   --tag=latest \
   --port=8101 \
   --user=sriniv7654 \
+  --pass=$DOCKER_PASS \
+  --kubeconfig=~/.kube/config \
+  --install-dir=/opt/cloud-ide
+```
+
+| Flag | Description |
+|------|-------------|
+| `--auto` | Zero prompts, auto-generates IDE password |
+| `--pass=XXX` | Docker Hub password (avoids interactive prompt) |
+| `--kubeconfig=PATH` | Auto-upload kubeconfig file |
+| `--tag=VERSION` | Image tag (default: latest) |
+| `--port=PORT` | IDE port (default: 8101) |
+| `--user=USER` | Docker Hub username (default: sriniv7654) |
+| `--repo=REPO` | Docker Hub repo (default: sriniv7654/devops-single) |
+| `--install-dir=PATH` | Install directory (default: /opt/cloud-ide) |
   --repo=sriniv7654/devops-single \
   --install-dir=/opt/cloud-ide
 ```
@@ -314,6 +338,33 @@ cp /path/to/kubeconfig.yaml /opt/cloud-ide/kubeconfigs/
 
 # Cleanup
 docker image prune -f && docker builder prune -f
+```
+
+## Security
+
+| Layer | Protection |
+|-------|------------|
+| **Server-side auth** | `/api/login` — passwords hashed (SHA-256 + salt), session tokens |
+| **Rate limiting** | 5 failed attempts → 15min IP lockout |
+| **IP allowlist** | Set `ALLOWED_IPS=x.x.x.x` env var to restrict access |
+| **Max connections** | 5 concurrent WebSockets (configurable via `MAX_CONNECTIONS`) |
+| **Session tokens** | SSH proxy requires valid token (prevents anonymous tunneling) |
+| **First-run setup** | Prompts for strong password on install (or auto-generates) |
+| **Password change** | `/api/change-password` endpoint |
+
+**Restrict to your IP only:**
+```bash
+# Add to systemd service
+sudo systemctl edit cloud-ide-proxy
+# Add: Environment=ALLOWED_IPS=YOUR.PUBLIC.IP
+sudo systemctl restart cloud-ide-proxy
+```
+
+**Change password:**
+```bash
+curl -X POST http://localhost:8101/api/change-password \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_SESSION_TOKEN","oldPassword":"old","newPassword":"new"}'
 ```
 
 ## Browser Support
