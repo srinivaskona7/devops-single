@@ -40,6 +40,23 @@ class LinuxAdminPanel {
       { id: 'boot', icon: '🚀', label: 'Boot & Startup' },
       { id: 'env', icon: '🌍', label: 'Environment' },
       { id: 'permissions', icon: '🔐', label: 'Permissions' },
+      { id: 'namespaces', icon: '📦', label: 'Namespaces' },
+      { id: 'cgroups', icon: '⚖️', label: 'Cgroups' },
+      { id: 'capabilities', icon: '🎫', label: 'Capabilities' },
+      { id: 'seccomp', icon: '🔏', label: 'Seccomp & AppArmor' },
+      { id: 'procfs', icon: '🗂️', label: '/proc Deep Dive' },
+      { id: 'sysfs', icon: '🔬', label: '/sys & Devices' },
+      { id: 'signals', icon: '📡', label: 'Signals & IPC' },
+      { id: 'fds', icon: '📎', label: 'File Descriptors' },
+      { id: 'netns', icon: '🕸️', label: 'Network Namespaces' },
+      { id: 'iptables', icon: '🔥', label: 'iptables Deep Dive' },
+      { id: 'tcpstack', icon: '📶', label: 'TCP/IP Stack' },
+      { id: 'scheduler', icon: '🎯', label: 'CPU Scheduler' },
+      { id: 'vmm', icon: '🧊', label: 'Virtual Memory' },
+      { id: 'ebpf', icon: '🐝', label: 'eBPF & Tracing' },
+      { id: 'containers', icon: '🐳', label: 'Container Internals' },
+      { id: 'selinux', icon: '🏛️', label: 'SELinux & MAC' },
+      { id: 'kernelarch', icon: '🏗️', label: 'Kernel Architecture' },
     ];
     let html = '<div class="admin-nav">';
     sections.forEach(s => {
@@ -378,6 +395,587 @@ class LinuxAdminPanel {
       <div class="admin-learn">💡 SUID (<code>chmod u+s</code>) = runs as file owner. World-writable = anyone can modify (security risk). <code>find / -nouser</code> = orphaned files from deleted users. Fix: <code>chown root:root</code>.</div>`;
   }
 
+  async _section_namespaces() {
+    const [ns, pidns, mntns, userns] = await Promise.all([
+      this.connection.exec('lsns 2>/dev/null | head -25 || ls -la /proc/1/ns/ 2>/dev/null'),
+      this.connection.exec('ls -la /proc/self/ns/pid 2>/dev/null && readlink /proc/self/ns/pid'),
+      this.connection.exec('cat /proc/self/mountinfo 2>/dev/null | wc -l'),
+      this.connection.exec('cat /proc/self/uid_map 2>/dev/null'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌─────────────────── Linux Kernel ───────────────────┐
+│                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │  PID NS  │  │  NET NS  │  │  MNT NS  │         │
+│  │ Isolates │  │ Isolates │  │ Isolates │         │
+│  │ process  │  │ network  │  │ mount    │         │
+│  │ tree     │  │ stack    │  │ points   │         │
+│  └──────────┘  └──────────┘  └──────────┘         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │  UTS NS  │  │  IPC NS  │  │  USER NS │         │
+│  │ Isolates │  │ Isolates │  │ Isolates │         │
+│  │ hostname │  │ IPC/shm  │  │ uid/gid  │         │
+│  └──────────┘  └──────────┘  └──────────┘         │
+│  ┌──────────┐  ┌──────────┐                        │
+│  │ CGROUP NS│  │  TIME NS │                        │
+│  │ Isolates │  │ Isolates │                        │
+│  │ cgroup   │  │ clocks   │                        │
+│  └──────────┘  └──────────┘                        │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Active Namespaces</div><pre class="admin-pre" style="font-size:10px">${this._esc(ns.stdout.trim())}</pre>
+      <div class="git-section-title">Current Process Namespaces</div><pre class="admin-pre">PID NS:  ${this._esc(pidns.stdout.trim())}
+Mount points: ${this._esc(mntns.stdout.trim())}
+UID map: ${this._esc(userns.stdout.trim())}</pre>
+      <div class="devops-card-actions">
+        <button class="devops-install-btn secondary" id="admin-ns-create-net">Create Network NS</button>
+        <button class="devops-install-btn secondary" id="admin-ns-create-pid">Run in PID NS</button>
+        <button class="devops-install-btn secondary" id="admin-ns-list">List All NS</button>
+      </div>
+      <div class="admin-learn">💡 <code>lsns</code> — List all namespaces. Linux has 8 namespace types. Containers use ALL of them for isolation. <code>unshare --pid --fork bash</code> creates a new PID namespace. <code>nsenter</code> enters existing ones.</div>`;
+  }
+
+  async _section_cgroups() {
+    const [version, groups, memCg, cpuCg] = await Promise.all([
+      this.connection.exec('stat -fc %T /sys/fs/cgroup 2>/dev/null; mount | grep cgroup | head -3'),
+      this.connection.exec('cat /proc/cgroups 2>/dev/null'),
+      this.connection.exec('cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || cat /sys/fs/cgroup/memory.current 2>/dev/null || echo "cgroup v2"'),
+      this.connection.exec('ls /sys/fs/cgroup/ 2>/dev/null | head -20'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌─────────── Control Groups (cgroups) ──────────────┐
+│                                                     │
+│  cgroup root (/)                                    │
+│  ├── system.slice/     (systemd services)           │
+│  │   ├── sshd.service  [cpu: 10%, mem: 50MB]       │
+│  │   ├── docker.service [cpu: 30%, mem: 200MB]     │
+│  │   └── nginx.service  [cpu: 5%, mem: 30MB]       │
+│  ├── user.slice/       (user sessions)              │
+│  │   └── user-0.slice  [cpu: 20%, mem: 100MB]      │
+│  └── docker/           (containers)                 │
+│      ├── container-a   [cpu: 2 cores, mem: 512MB]  │
+│      └── container-b   [cpu: 1 core, mem: 256MB]   │
+│                                                     │
+│  Controllers: cpu, memory, io, pids, cpuset         │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Cgroup Controllers</div><pre class="admin-pre" style="font-size:10px">${this._esc(groups.stdout.trim())}</pre>
+      <div class="git-section-title">Cgroup Hierarchy</div><pre class="admin-pre">${this._esc(cpuCg.stdout.trim())}</pre>
+      <div class="admin-learn">💡 <code>cgroups</code> limit resources (CPU, memory, I/O, PIDs). v1 has separate hierarchies per controller. v2 has unified hierarchy. Docker uses cgroups for <code>--memory</code> and <code>--cpus</code> limits. <code>systemd-cgls</code> shows the tree.</div>`;
+  }
+
+  async _section_capabilities() {
+    const [caps, capBound, capAmb] = await Promise.all([
+      this.connection.exec('cat /proc/self/status 2>/dev/null | grep -i cap'),
+      this.connection.exec('grep -r "" /proc/1/status 2>/dev/null | grep Cap | head -5'),
+      this.connection.exec('getpcaps 1 2>/dev/null || echo "getpcaps not available"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌────────── Linux Capabilities ─────────────┐
+│                                            │
+│  Root (ALL 41 capabilities)                │
+│  ├── CAP_NET_BIND_SERVICE  (bind < 1024)  │
+│  ├── CAP_NET_RAW           (raw sockets)  │
+│  ├── CAP_SYS_ADMIN         (mount, ns)    │
+│  ├── CAP_SYS_PTRACE        (debug procs)  │
+│  ├── CAP_DAC_OVERRIDE      (bypass perms) │
+│  ├── CAP_CHOWN             (change owner) │
+│  ├── CAP_KILL              (send signals) │
+│  └── CAP_NET_ADMIN         (network cfg)  │
+│                                            │
+│  Non-root process: 0 capabilities          │
+│  Container default: ~14 capabilities       │
+│  --privileged: ALL capabilities            │
+└────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Current Process Capabilities</div><pre class="admin-pre" style="font-size:10px">${this._esc(caps.stdout.trim())}</pre>
+      <div class="git-section-title">PID 1 (init) Capabilities</div><pre class="admin-pre" style="font-size:10px">${this._esc(capBound.stdout.trim())}</pre>
+      <div class="admin-learn">💡 Capabilities split root power into 41 pieces. Instead of running as root, grant specific caps: <code>setcap cap_net_bind_service+ep /usr/bin/node</code> lets Node bind port 80 without root. Docker drops dangerous caps by default.</div>`;
+  }
+
+  async _section_seccomp() {
+    const [seccomp, apparmor, profiles] = await Promise.all([
+      this.connection.exec('grep Seccomp /proc/self/status 2>/dev/null; cat /proc/sys/kernel/seccomp/actions_avail 2>/dev/null'),
+      this.connection.exec('cat /sys/module/apparmor/parameters/enabled 2>/dev/null; aa-status 2>/dev/null | head -10 || echo "AppArmor not active"'),
+      this.connection.exec('ls /etc/apparmor.d/ 2>/dev/null | head -10 || echo "No profiles"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌───────── Syscall Filtering ──────────┐
+│                                       │
+│  User Process                         │
+│       │ syscall (e.g. write())        │
+│       ▼                               │
+│  ┌─────────────┐                      │
+│  │  Seccomp    │ ← BPF filter         │
+│  │  Filter     │   ALLOW / KILL /     │
+│  │             │   ERRNO / TRACE      │
+│  └──────┬──────┘                      │
+│         ▼                             │
+│  ┌─────────────┐                      │
+│  │  AppArmor/  │ ← MAC policy         │
+│  │  SELinux    │   file, net, caps    │
+│  └──────┬──────┘                      │
+│         ▼                             │
+│  ┌─────────────┐                      │
+│  │   Kernel    │                      │
+│  └─────────────┘                      │
+└───────────────────────────────────────┘</pre>
+      <div class="git-section-title">Seccomp Status</div><pre class="admin-pre">${this._esc(seccomp.stdout.trim())}</pre>
+      <div class="git-section-title">AppArmor</div><pre class="admin-pre" style="font-size:10px">${this._esc(apparmor.stdout.trim())}</pre>
+      <div class="admin-learn">💡 <code>Seccomp</code> filters syscalls via BPF. Mode 2 = filter mode (Docker default blocks ~44 dangerous syscalls like <code>reboot</code>, <code>mount</code>). AppArmor restricts file/network access per-program via profiles.</div>`;
+  }
+
+  async _section_procfs() {
+    const [cpuinfo, meminfo, version, cmdline, filesystems] = await Promise.all([
+      this.connection.exec('head -20 /proc/cpuinfo 2>/dev/null'),
+      this.connection.exec('head -15 /proc/meminfo 2>/dev/null'),
+      this.connection.exec('cat /proc/version 2>/dev/null'),
+      this.connection.exec('cat /proc/cmdline 2>/dev/null'),
+      this.connection.exec('cat /proc/filesystems 2>/dev/null | grep -v nodev'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────────── /proc Virtual Filesystem ────────────┐
+│                                                    │
+│  /proc/                                            │
+│  ├── cpuinfo        CPU model, cores, flags        │
+│  ├── meminfo        Detailed memory breakdown      │
+│  ├── loadavg        1/5/15 min load averages       │
+│  ├── version        Kernel version + compiler      │
+│  ├── cmdline        Kernel boot parameters         │
+│  ├── filesystems    Supported filesystem types     │
+│  ├── partitions     Block devices                  │
+│  ├── net/           Network stats & config         │
+│  │   ├── tcp        Active TCP connections         │
+│  │   ├── dev        Interface byte counts          │
+│  │   └── route      Kernel routing table           │
+│  ├── sys/           Tunable kernel parameters      │
+│  │   ├── vm/        Memory management              │
+│  │   ├── net/       Network stack tuning           │
+│  │   └── fs/        Filesystem limits              │
+│  └── [PID]/         Per-process info               │
+│      ├── status     Process state, memory, caps    │
+│      ├── maps       Memory mappings (mmap)         │
+│      ├── fd/        Open file descriptors          │
+│      └── ns/        Namespace links                │
+└────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">/proc/cpuinfo</div><pre class="admin-pre" style="font-size:10px">${this._esc(cpuinfo.stdout.trim())}</pre>
+      <div class="git-section-title">/proc/meminfo</div><pre class="admin-pre" style="font-size:10px">${this._esc(meminfo.stdout.trim())}</pre>
+      <div class="git-section-title">Boot cmdline</div><pre class="admin-pre" style="font-size:10px">${this._esc(cmdline.stdout.trim())}</pre>
+      <div class="admin-learn">💡 <code>/proc</code> is a virtual filesystem — files don't exist on disk. Kernel generates them on read. Every process has <code>/proc/[PID]/</code>. This is how tools like <code>ps</code>, <code>top</code>, <code>free</code> work — they read /proc.</div>`;
+  }
+
+  async _section_sysfs() {
+    const [block, net, cpu, pci] = await Promise.all([
+      this.connection.exec('ls /sys/block/ 2>/dev/null'),
+      this.connection.exec('ls /sys/class/net/ 2>/dev/null'),
+      this.connection.exec('ls /sys/devices/system/cpu/ 2>/dev/null | grep cpu[0-9]'),
+      this.connection.exec('lspci 2>/dev/null | head -10 || ls /sys/bus/pci/devices/ 2>/dev/null | head -10'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────────── /sys Virtual Filesystem ─────────────┐
+│                                                    │
+│  /sys/                                             │
+│  ├── block/          Block devices (sda, nvme)     │
+│  ├── bus/            Bus types (pci, usb, scsi)    │
+│  ├── class/          Device classes                │
+│  │   ├── net/        Network interfaces            │
+│  │   ├── block/      Block devices                 │
+│  │   └── tty/        Terminal devices              │
+│  ├── devices/        Device hierarchy              │
+│  │   └── system/                                   │
+│  │       ├── cpu/    CPU topology & freq           │
+│  │       ├── memory/ NUMA memory nodes             │
+│  │       └── node/   NUMA nodes                    │
+│  ├── fs/             Filesystem info               │
+│  │   └── cgroup/     Cgroup controllers            │
+│  └── kernel/         Kernel objects                │
+│      └── mm/         Memory management             │
+└────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Block Devices</div><pre class="admin-pre">${this._esc(block.stdout.trim())}</pre>
+      <div class="git-section-title">Network Interfaces</div><pre class="admin-pre">${this._esc(net.stdout.trim())}</pre>
+      <div class="git-section-title">CPUs</div><pre class="admin-pre">${this._esc(cpu.stdout.trim())}</pre>
+      <div class="git-section-title">PCI Devices</div><pre class="admin-pre" style="font-size:10px">${this._esc(pci.stdout.trim())}</pre>
+      <div class="admin-learn">💡 <code>/sys</code> exposes kernel device model. Unlike /proc (process info), /sys is hardware. You can tune devices: <code>echo 1024 > /sys/block/sda/queue/nr_requests</code> changes disk queue depth.</div>`;
+  }
+
+  async _section_signals() {
+    const [siglist, pending, ipc] = await Promise.all([
+      this.connection.exec('kill -l 2>/dev/null'),
+      this.connection.exec('cat /proc/self/status 2>/dev/null | grep -i sig'),
+      this.connection.exec('ipcs 2>/dev/null || echo "ipcs not available"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌────────── Linux Signals ──────────────────┐
+│                                            │
+│  Signal    #   Default    Use              │
+│  ─────────────────────────────────────     │
+│  SIGHUP    1   Terminate  Reload config    │
+│  SIGINT    2   Terminate  Ctrl+C           │
+│  SIGQUIT   3   Core dump  Ctrl+\\           │
+│  SIGKILL   9   Terminate  Force kill ☠️     │
+│  SIGSEGV  11   Core dump  Segfault         │
+│  SIGTERM  15   Terminate  Graceful stop    │
+│  SIGSTOP  19   Stop       Pause (freeze)   │
+│  SIGCONT  18   Continue   Resume           │
+│  SIGUSR1  10   Terminate  User-defined     │
+│  SIGUSR2  12   Terminate  User-defined     │
+│                                            │
+│  SIGKILL & SIGSTOP cannot be caught!       │
+└────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">All Signals</div><pre class="admin-pre" style="font-size:10px">${this._esc(siglist.stdout.trim())}</pre>
+      <div class="git-section-title">IPC Resources (shared memory, semaphores)</div><pre class="admin-pre" style="font-size:10px">${this._esc(ipc.stdout.trim())}</pre>
+      <div class="admin-learn">💡 <code>kill -15 PID</code> = graceful (SIGTERM, app can cleanup). <code>kill -9 PID</code> = force (SIGKILL, kernel kills instantly). <code>kill -HUP PID</code> = reload config (nginx, sshd). IPC: shared memory + semaphores for inter-process comms.</div>`;
+  }
+
+  async _section_fds() {
+    const [fdMax, fdUsed, lsof, openFiles] = await Promise.all([
+      this.connection.exec('cat /proc/sys/fs/file-max 2>/dev/null'),
+      this.connection.exec('cat /proc/sys/fs/file-nr 2>/dev/null'),
+      this.connection.exec('lsof 2>/dev/null | wc -l || echo "lsof not installed"'),
+      this.connection.exec('ls -la /proc/self/fd/ 2>/dev/null'),
+    ]);
+    const nr = fdUsed.stdout.trim().split('\t');
+    return `<pre class="admin-pre admin-ascii">
+┌──────── File Descriptors ─────────────────┐
+│                                            │
+│  Process                                   │
+│  ├── fd 0 → stdin  (keyboard/pipe)        │
+│  ├── fd 1 → stdout (terminal/pipe)        │
+│  ├── fd 2 → stderr (terminal/log)         │
+│  ├── fd 3 → socket (TCP connection)       │
+│  ├── fd 4 → file   (/var/log/app.log)     │
+│  └── fd 5 → pipe   (to child process)     │
+│                                            │
+│  Max per system: ${this._esc(fdMax.stdout.trim()).padEnd(26)}│
+│  Allocated:      ${(nr[0] || '?').padEnd(26)}│
+│  Free:           ${(nr[1] || '?').padEnd(26)}│
+└────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Current Process FDs</div><pre class="admin-pre">${this._esc(openFiles.stdout.trim())}</pre>
+      <div class="git-section-title">System-wide Open Files</div><pre class="admin-pre">Total open: ${this._esc(lsof.stdout.trim())}</pre>
+      <div class="admin-learn">💡 Everything in Linux is a file — sockets, pipes, devices. <code>lsof</code> lists all open files. <code>ulimit -n</code> = per-process limit (default 1024). For high-traffic servers: set to 65535 in <code>/etc/security/limits.conf</code>.</div>`;
+  }
+
+  async _section_netns() {
+    const [netns, veths, bridges] = await Promise.all([
+      this.connection.exec('ip netns list 2>/dev/null || echo "No network namespaces"'),
+      this.connection.exec('ip link show type veth 2>/dev/null | head -10 || echo "No veth pairs"'),
+      this.connection.exec('brctl show 2>/dev/null || ip link show type bridge 2>/dev/null | head -10 || echo "No bridges"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌────── Network Namespaces & Isolation ─────────────┐
+│                                                     │
+│  Host Network NS                                    │
+│  ├── eth0: 172.31.x.x (physical/cloud NIC)        │
+│  ├── docker0: 172.17.0.1 (bridge)                  │
+│  │   ├── veth123 ←→ container-a (172.17.0.2)      │
+│  │   └── veth456 ←→ container-b (172.17.0.3)      │
+│  │                                                  │
+│  Container-A Network NS                             │
+│  ├── eth0: 172.17.0.2 (veth peer)                  │
+│  └── lo: 127.0.0.1                                 │
+│                                                     │
+│  Container-B Network NS                             │
+│  ├── eth0: 172.17.0.3 (veth peer)                  │
+│  └── lo: 127.0.0.1                                 │
+│                                                     │
+│  veth = virtual ethernet pair (pipe between NS)    │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Network Namespaces</div><pre class="admin-pre">${this._esc(netns.stdout.trim())}</pre>
+      <div class="git-section-title">Veth Pairs</div><pre class="admin-pre" style="font-size:10px">${this._esc(veths.stdout.trim())}</pre>
+      <div class="git-section-title">Bridges</div><pre class="admin-pre">${this._esc(bridges.stdout.trim())}</pre>
+      <div class="devops-card-actions">
+        <button class="devops-install-btn secondary" id="admin-netns-create">Create Net NS "test"</button>
+        <button class="devops-install-btn secondary" id="admin-netns-exec">Exec in NS</button>
+      </div>
+      <div class="admin-learn">💡 <code>ip netns add test</code> creates isolated network stack. <code>ip link add veth0 type veth peer name veth1</code> creates a virtual cable. Move one end into the NS: <code>ip link set veth1 netns test</code>. This is exactly how Docker networking works!</div>`;
+  }
+
+  async _section_iptables() {
+    const [filter, nat, mangle, conns] = await Promise.all([
+      this.connection.exec('sudo iptables -L -n -v --line-numbers 2>/dev/null | head -25'),
+      this.connection.exec('sudo iptables -t nat -L -n --line-numbers 2>/dev/null | head -15'),
+      this.connection.exec('sudo iptables -t mangle -L -n 2>/dev/null | head -10 || echo "empty"'),
+      this.connection.exec('cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null; echo "/"; cat /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────── iptables Packet Flow (Netfilter) ─────────┐
+│                                                     │
+│  Incoming Packet                                    │
+│       │                                             │
+│       ▼                                             │
+│  ┌─────────┐    ┌──────────┐    ┌─────────┐       │
+│  │PREROUTING│───▶│ ROUTING  │───▶│ FORWARD │──┐    │
+│  │ (nat)   │    │ Decision │    │ (filter)│  │    │
+│  └─────────┘    └────┬─────┘    └─────────┘  │    │
+│                      │                        │    │
+│                      ▼                        ▼    │
+│                 ┌─────────┐          ┌──────────┐  │
+│                 │  INPUT  │          │POSTROUTING│  │
+│                 │ (filter)│          │  (nat)   │  │
+│                 └────┬────┘          └──────────┘  │
+│                      │                             │
+│                      ▼                             │
+│                 ┌─────────┐                        │
+│                 │  Local  │                        │
+│                 │ Process │                        │
+│                 └────┬────┘                        │
+│                      │                             │
+│                      ▼                             │
+│                 ┌─────────┐                        │
+│                 │ OUTPUT  │                        │
+│                 │ (filter)│                        │
+│                 └─────────┘                        │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Filter Table (main firewall)</div><pre class="admin-pre" style="font-size:10px">${this._esc(filter.stdout.trim())}</pre>
+      <div class="git-section-title">NAT Table</div><pre class="admin-pre" style="font-size:10px">${this._esc(nat.stdout.trim())}</pre>
+      <div class="git-section-title">Conntrack</div><pre class="admin-pre">${this._esc(conns.stdout.trim().replace('\n', ''))}</pre>
+      <div class="admin-learn">💡 Packets traverse chains: PREROUTING → INPUT (local) or FORWARD (routed) → POSTROUTING. Docker adds NAT rules for port mapping. <code>conntrack</code> tracks connection state — exhaustion = dropped packets.</div>`;
+  }
+
+  async _section_tcpstack() {
+    const [tcpParams, connStates, retrans] = await Promise.all([
+      this.connection.exec('sysctl net.ipv4.tcp_fin_timeout net.ipv4.tcp_keepalive_time net.core.somaxconn net.ipv4.tcp_max_syn_backlog net.ipv4.ip_local_port_range 2>/dev/null'),
+      this.connection.exec("ss -s 2>/dev/null"),
+      this.connection.exec('cat /proc/net/snmp 2>/dev/null | grep -A1 Tcp | tail -1 | awk \'{print "Retransmits: "$13" ActiveOpens: "$6" PassiveOpens: "$7}\''),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌────────── TCP Connection Lifecycle ───────────────┐
+│                                                     │
+│  Client              Server                         │
+│    │                   │                            │
+│    │──── SYN ────────▶│  (SYN_SENT → SYN_RECV)    │
+│    │◀── SYN+ACK ──────│                            │
+│    │──── ACK ────────▶│  (ESTABLISHED)             │
+│    │                   │                            │
+│    │◀──── DATA ──────▶│  (bidirectional)           │
+│    │                   │                            │
+│    │──── FIN ────────▶│  (FIN_WAIT_1)              │
+│    │◀── ACK ──────────│  (FIN_WAIT_2/CLOSE_WAIT)  │
+│    │◀── FIN ──────────│  (LAST_ACK)               │
+│    │──── ACK ────────▶│  (TIME_WAIT → CLOSED)     │
+│    │                   │                            │
+│  TIME_WAIT lasts ${this._esc((await this.connection.exec('cat /proc/sys/net/ipv4/tcp_fin_timeout 2>/dev/null')).stdout.trim())}s (tcp_fin_timeout)       │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">TCP Parameters</div><pre class="admin-pre">${this._esc(tcpParams.stdout.trim())}</pre>
+      <div class="git-section-title">Socket Summary</div><pre class="admin-pre">${this._esc(connStates.stdout.trim())}</pre>
+      <div class="git-section-title">TCP Counters</div><pre class="admin-pre">${this._esc(retrans.stdout.trim())}</pre>
+      <div class="admin-learn">💡 High TIME_WAIT? Lower <code>tcp_fin_timeout</code> (default 60→15). Many SYN floods? Increase <code>tcp_max_syn_backlog</code>. <code>somaxconn</code> = accept queue size. For 10K+ connections: tune all three.</div>`;
+  }
+
+  async _section_scheduler() {
+    const [policy, rt, nice, loadavg] = await Promise.all([
+      this.connection.exec('chrt -p 1 2>/dev/null || echo "chrt not available"'),
+      this.connection.exec('cat /proc/sys/kernel/sched_rt_runtime_us 2>/dev/null'),
+      this.connection.exec('ps -eo pid,ni,pri,comm --sort=-pri 2>/dev/null | head -15'),
+      this.connection.exec('cat /proc/stat 2>/dev/null | head -1'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────── CPU Scheduler ────────────────────┐
+│                                            │
+│  Scheduling Classes (priority order):      │
+│  ┌────────────────────────────────┐       │
+│  │ SCHED_DEADLINE  (earliest DL) │ ← RT  │
+│  │ SCHED_FIFO     (first in)    │ ← RT  │
+│  │ SCHED_RR       (round robin) │ ← RT  │
+│  │ SCHED_OTHER    (CFS default) │ ← Most│
+│  │ SCHED_BATCH    (CPU-bound)   │       │
+│  │ SCHED_IDLE     (lowest prio) │       │
+│  └────────────────────────────────┘       │
+│                                            │
+│  CFS (Completely Fair Scheduler):          │
+│  - Red-black tree of runnable tasks       │
+│  - Virtual runtime = actual / weight      │
+│  - Nice -20 = highest, +19 = lowest      │
+│  - nice 0 = default (weight 1024)        │
+└────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">PID 1 Scheduling Policy</div><pre class="admin-pre">${this._esc(policy.stdout.trim())}</pre>
+      <div class="git-section-title">Processes by Priority</div><pre class="admin-pre" style="font-size:10px">${this._esc(nice.stdout.trim())}</pre>
+      <div class="admin-learn">💡 <code>nice -n -10 command</code> = higher priority. <code>renice -n 5 -p PID</code> = lower running process. CFS ensures fairness — even nice -20 can't starve others. <code>chrt -f 99 command</code> = real-time FIFO (careful!).</div>`;
+  }
+
+  async _section_vmm() {
+    const [vmstat, hugepages, oom, swappiness] = await Promise.all([
+      this.connection.exec('vmstat 1 2 2>/dev/null | tail -1 || cat /proc/vmstat 2>/dev/null | head -15'),
+      this.connection.exec('cat /proc/meminfo 2>/dev/null | grep -i huge'),
+      this.connection.exec('dmesg 2>/dev/null | grep -i "oom\\|out of memory" | tail -5 || echo "No OOM events"'),
+      this.connection.exec('cat /proc/sys/vm/swappiness 2>/dev/null'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────── Virtual Memory Manager ───────────────────┐
+│                                                     │
+│  Process Virtual Address Space (64-bit)             │
+│  ┌─────────────────────────┐  0xFFFF...            │
+│  │     Kernel Space        │  (top 128TB)          │
+│  ├─────────────────────────┤                        │
+│  │     Stack ↓             │  (grows down)         │
+│  │         ...             │                        │
+│  │     Heap  ↑             │  (grows up, malloc)   │
+│  │     BSS                 │  (uninitialized)      │
+│  │     Data                │  (global variables)   │
+│  │     Text (code)         │  (read-only)          │
+│  └─────────────────────────┘  0x0000...            │
+│                                                     │
+│  Page Size: 4KB  |  Huge Pages: 2MB / 1GB          │
+│  Swappiness: ${this._esc(swappiness.stdout.trim()).padEnd(5)} (0=never swap, 100=always)   │
+│                                                     │
+│  Page Fault → Check page table → Load from disk     │
+│  OOM Killer → Score processes → Kill highest score  │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">VMstat</div><pre class="admin-pre">${this._esc(vmstat.stdout.trim())}</pre>
+      <div class="git-section-title">Huge Pages</div><pre class="admin-pre">${this._esc(hugepages.stdout.trim())}</pre>
+      <div class="git-section-title">OOM Events</div><pre class="admin-pre" style="font-size:10px">${this._esc(oom.stdout.trim())}</pre>
+      <div class="admin-learn">💡 <code>vm.swappiness=10</code> for servers (less swapping). Huge pages reduce TLB misses for databases. OOM killer targets highest <code>oom_score</code>. Protect critical processes: <code>echo -1000 > /proc/PID/oom_score_adj</code>.</div>`;
+  }
+
+  async _section_ebpf() {
+    const [bpftool, tracepoints, kprobes] = await Promise.all([
+      this.connection.exec('bpftool prog list 2>/dev/null | head -10 || echo "bpftool not installed (yum install bpftool)"'),
+      this.connection.exec('ls /sys/kernel/debug/tracing/events/ 2>/dev/null | head -15 || ls /sys/kernel/tracing/events/ 2>/dev/null | head -15 || echo "debugfs not mounted"'),
+      this.connection.exec('cat /sys/kernel/debug/tracing/available_filter_functions 2>/dev/null | wc -l || echo "N/A"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────── eBPF & Kernel Tracing ────────────────────┐
+│                                                     │
+│  User Space                                         │
+│  ├── bpftool, bpftrace, bcc tools                  │
+│  │                                                  │
+│  │   ┌─── BPF Program ───┐                         │
+│  │   │ Compiled C/Rust   │                         │
+│  │   │ → BPF bytecode    │                         │
+│  │   └────────┬──────────┘                         │
+│  │            │ load                                │
+│  ▼            ▼                                     │
+│  ┌──── Kernel BPF VM ────┐                         │
+│  │ Verifier (safety)     │                         │
+│  │ JIT Compiler          │                         │
+│  │ Maps (key-value)      │                         │
+│  └──────────┬────────────┘                         │
+│             │ attach to:                            │
+│  ┌──────────┴────────────────────────┐             │
+│  │ kprobes  tracepoints  XDP  TC    │             │
+│  │ (func)   (events)   (net) (net)  │             │
+│  └───────────────────────────────────┘             │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">BPF Programs Loaded</div><pre class="admin-pre">${this._esc(bpftool.stdout.trim())}</pre>
+      <div class="git-section-title">Tracepoint Categories</div><pre class="admin-pre" style="font-size:10px">${this._esc(tracepoints.stdout.trim())}</pre>
+      <div class="git-section-title">Kprobe-able Functions</div><pre class="admin-pre">${this._esc(kprobes.stdout.trim())} functions available</pre>
+      <div class="admin-learn">💡 eBPF = programmable kernel hooks. Used by: Cilium (K8s networking), Falco (security), bcc tools (performance). <code>bpftrace -e 'tracepoint:syscalls:sys_enter_open { printf("%s\\n", comm); }'</code> traces file opens in real-time.</div>`;
+  }
+
+  async _section_containers() {
+    const [dockerInfo, overlay, unshare] = await Promise.all([
+      this.connection.exec('docker info 2>/dev/null | grep -E "Storage|Runtime|Cgroup|Kernel|OS" | head -10 || echo "Docker not running"'),
+      this.connection.exec('mount | grep overlay 2>/dev/null | head -5 || echo "No overlay mounts"'),
+      this.connection.exec('unshare --help 2>/dev/null | head -3 || echo "unshare available"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────── Container = NS + Cgroups + OverlayFS ─────┐
+│                                                     │
+│  "Container" is NOT a kernel concept.               │
+│  It's a combination of:                             │
+│                                                     │
+│  1. Namespaces (isolation)                          │
+│     ├── PID   → own process tree (PID 1 inside)    │
+│     ├── NET   → own IP, ports, routes              │
+│     ├── MNT   → own filesystem view                │
+│     ├── UTS   → own hostname                       │
+│     ├── IPC   → own shared memory                  │
+│     └── USER  → own uid mapping                    │
+│                                                     │
+│  2. Cgroups (resource limits)                       │
+│     ├── memory.max = 512MB                         │
+│     ├── cpu.max = 200000/100000 (2 cores)          │
+│     └── pids.max = 1000                            │
+│                                                     │
+│  3. OverlayFS (copy-on-write filesystem)            │
+│     ┌─────────┐                                     │
+│     │ upper   │ ← writes go here (container layer) │
+│     │ lower   │ ← read-only (image layers)         │
+│     │ merged  │ ← what the process sees            │
+│     └─────────┘                                     │
+│                                                     │
+│  4. Seccomp + Capabilities (security)               │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Docker Info</div><pre class="admin-pre" style="font-size:10px">${this._esc(dockerInfo.stdout.trim())}</pre>
+      <div class="git-section-title">OverlayFS Mounts</div><pre class="admin-pre" style="font-size:10px">${this._esc(overlay.stdout.trim())}</pre>
+      <div class="devops-card-actions">
+        <button class="devops-install-btn secondary" id="admin-mini-container">Create Mini Container (unshare)</button>
+      </div>
+      <div class="admin-learn">💡 You can build a "container" with just: <code>unshare --pid --net --mount --fork bash</code>. Docker adds image management, networking, and UX. Understanding this = understanding containers at the kernel level.</div>`;
+  }
+
+  async _section_selinux() {
+    const [status, booleans, contexts] = await Promise.all([
+      this.connection.exec('getenforce 2>/dev/null || cat /sys/fs/selinux/enforce 2>/dev/null || echo "SELinux not available"'),
+      this.connection.exec('getsebool -a 2>/dev/null | head -15 || echo "No SELinux booleans"'),
+      this.connection.exec('ls -Z /etc/passwd /usr/bin/ssh /var/log 2>/dev/null || echo "No SELinux contexts"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────── Mandatory Access Control ─────────────────┐
+│                                                     │
+│  DAC (Traditional)         MAC (SELinux/AppArmor)  │
+│  ┌─────────────────┐      ┌─────────────────────┐ │
+│  │ Owner: rw-       │      │ Policy: type_t can  │ │
+│  │ Group: r--       │      │   read file_t       │ │
+│  │ Other: ---       │      │   write log_t       │ │
+│  │                  │      │   NOT access ssh_t  │ │
+│  │ Root bypasses ✗  │      │   Root CANNOT ✓     │ │
+│  └─────────────────┘      └─────────────────────┘ │
+│                                                     │
+│  SELinux Modes:                                     │
+│  ├── Enforcing  = blocks violations                │
+│  ├── Permissive = logs but allows                  │
+│  └── Disabled   = off completely                   │
+│                                                     │
+│  Every file/process has a security context:         │
+│  user:role:type:level                               │
+│  e.g. system_u:object_r:httpd_sys_content_t:s0     │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">SELinux Status</div><pre class="admin-pre">${this._esc(status.stdout.trim())}</pre>
+      <div class="git-section-title">Booleans (toggleable policies)</div><pre class="admin-pre" style="font-size:10px">${this._esc(booleans.stdout.trim())}</pre>
+      <div class="git-section-title">Security Contexts</div><pre class="admin-pre" style="font-size:10px">${this._esc(contexts.stdout.trim())}</pre>
+      <div class="admin-learn">💡 SELinux = even root can't bypass policy. <code>setenforce 0</code> = permissive (debug). <code>audit2allow</code> generates rules from denials. AWS AL2023 uses SELinux. If app fails mysteriously, check <code>ausearch -m avc</code>.</div>`;
+  }
+
+  async _section_kernelarch() {
+    const [version, modules, interrupts, syscalls] = await Promise.all([
+      this.connection.exec('uname -a 2>/dev/null'),
+      this.connection.exec('lsmod 2>/dev/null | wc -l'),
+      this.connection.exec('cat /proc/interrupts 2>/dev/null | head -10'),
+      this.connection.exec('cat /proc/kallsyms 2>/dev/null | wc -l || echo "restricted"'),
+    ]);
+    return `<pre class="admin-pre admin-ascii">
+┌──────── Linux Kernel Architecture ────────────────┐
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │               User Space                     │   │
+│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐       │   │
+│  │  │ bash │ │nginx │ │docker│ │ node │       │   │
+│  │  └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘       │   │
+│  └─────┼────────┼────────┼────────┼────────────┘   │
+│        │ syscall│        │        │                 │
+│  ══════╪════════╪════════╪════════╪═══════════════  │
+│        ▼        ▼        ▼        ▼                 │
+│  ┌─────────────────────────────────────────────┐   │
+│  │            Kernel Space                      │   │
+│  │  ┌────────────────────────────────────────┐ │   │
+│  │  │ System Call Interface (300+ syscalls)   │ │   │
+│  │  ├────────────────────────────────────────┤ │   │
+│  │  │ VFS │ Scheduler │ Memory │ Net Stack  │ │   │
+│  │  ├────────────────────────────────────────┤ │   │
+│  │  │ Device Drivers (modules: ${this._esc(modules.stdout.trim()).padEnd(4)})       │ │   │
+│  │  ├────────────────────────────────────────┤ │   │
+│  │  │ Arch-specific (x86_64, arm64)          │ │   │
+│  │  └────────────────────────────────────────┘ │   │
+│  └─────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              Hardware                        │   │
+│  │  CPU │ RAM │ Disk │ NIC │ GPU               │   │
+│  └─────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘</pre>
+      <div class="git-section-title">Kernel Version</div><pre class="admin-pre">${this._esc(version.stdout.trim())}</pre>
+      <div class="git-section-title">Interrupts (hardware→kernel)</div><pre class="admin-pre" style="font-size:10px">${this._esc(interrupts.stdout.trim())}</pre>
+      <div class="git-section-title">Kernel Symbols</div><pre class="admin-pre">${this._esc(syscalls.stdout.trim())} symbols in kernel</pre>
+      <div class="admin-learn">💡 The kernel is the bridge between hardware and software. User programs CANNOT access hardware directly — they make syscalls (read, write, open, socket). <code>strace -p PID</code> traces syscalls in real-time. Understanding this = understanding Linux.</div>`;
+  }
+
   _bindSectionEvents(section) {
     if (section === 'memory') {
       document.getElementById('admin-drop-cache')?.addEventListener('click', async () => {
@@ -490,6 +1088,35 @@ class LinuxAdminPanel {
         await this.connection.exec(`(crontab -l 2>/dev/null; echo "${line}") | crontab -`);
         window.app.notify('Cron job added', 'success');
         this._loadSection('cron');
+      });
+    }
+    if (section === 'namespaces') {
+      document.getElementById('admin-ns-create-net')?.addEventListener('click', async () => {
+        const r = await this.connection.exec('sudo ip netns add test-ns 2>&1 && sudo ip netns list');
+        window.app.notify(r.code === 0 ? 'Created "test-ns"' : r.stdout, r.code === 0 ? 'success' : 'error');
+        this._loadSection('namespaces');
+      });
+      document.getElementById('admin-ns-create-pid')?.addEventListener('click', async () => {
+        const r = await this.connection.exec('sudo unshare --pid --fork --mount-proc readlink /proc/self/ns/pid 2>&1');
+        window.app.notify('PID NS: ' + r.stdout.trim(), 'info');
+      });
+      document.getElementById('admin-ns-list')?.addEventListener('click', () => this._loadSection('namespaces'));
+    }
+    if (section === 'netns') {
+      document.getElementById('admin-netns-create')?.addEventListener('click', async () => {
+        const r = await this.connection.exec('sudo ip netns add test 2>&1 && sudo ip netns exec test ip link set lo up 2>&1 && echo "Created net NS test with loopback up"');
+        window.app.notify(r.stdout.trim(), r.code === 0 ? 'success' : 'error');
+        this._loadSection('netns');
+      });
+      document.getElementById('admin-netns-exec')?.addEventListener('click', async () => {
+        const r = await this.connection.exec('sudo ip netns exec test ip addr 2>&1 || echo "NS test not found"');
+        window.app.notify(r.stdout.substring(0, 300), 'info');
+      });
+    }
+    if (section === 'containers') {
+      document.getElementById('admin-mini-container')?.addEventListener('click', async () => {
+        const r = await this.connection.exec('sudo unshare --pid --net --uts --mount --fork hostname mini-container 2>&1 && echo "Mini container created (exited)"');
+        window.app.notify(r.stdout.trim() || 'Namespace created', 'success');
       });
     }
   }

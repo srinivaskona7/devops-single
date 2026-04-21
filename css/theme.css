@@ -1642,3 +1642,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   background: var(--bg-tertiary); padding: 1px 4px; border-radius: 2px;
   font-size: 10px; color: var(--accent-green);
 }
+.admin-ascii {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  line-height: 1.4; color: var(--accent); background: var(--bg-primary);
+  border: 1px solid var(--bg-tertiary); border-radius: 6px;
+  padding: 12px; overflow-x: auto; white-space: pre;
+}
