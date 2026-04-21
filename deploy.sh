@@ -35,21 +35,37 @@ configured() { echo -e "${GREEN}  CONFIGURED:${NC} $1"; }
 no_change()  { echo -e "${DIM}  NO CHANGES:${NC} $1"; }
 
 # ─── Parse args ────────────────────────────────────────────
+DOCKER_PASS="${DOCKER_PASS:-}"
+AUTO_MODE=false
+KUBECONFIG_PATH_ARG=""
+
 for arg in "$@"; do
   case $arg in
     --tag=*)         TAG="${arg#*=}" ;;
     --port=*)        IDE_PORT="${arg#*=}" ;;
     --repo=*)        REPO="${arg#*=}" ;;
     --user=*)        DOCKER_USER="${arg#*=}" ;;
+    --pass=*)        DOCKER_PASS="${arg#*=}" ;;
     --install-dir=*) INSTALL_DIR="${arg#*=}" ;;
+    --kubeconfig=*)  KUBECONFIG_PATH_ARG="${arg#*=}" ;;
+    --auto)          AUTO_MODE=true ;;
     --help|-h)
       echo "Usage: deploy.sh [OPTIONS]"
       echo ""
-      echo "  --tag=VERSION      Image tag (default: latest)"
-      echo "  --port=PORT        IDE port (default: 8101)"
-      echo "  --repo=REPO        Docker Hub repo (default: sriniv7654/devops-single)"
-      echo "  --user=USER        Docker Hub username (default: sriniv7654)"
-      echo "  --install-dir=PATH Install directory (default: /opt/cloud-ide)"
+      echo "  --tag=VERSION        Image tag (default: latest)"
+      echo "  --port=PORT          IDE port (default: 8101)"
+      echo "  --repo=REPO          Docker Hub repo (default: sriniv7654/devops-single)"
+      echo "  --user=USER          Docker Hub username (default: sriniv7654)"
+      echo "  --pass=PASS          Docker Hub password (avoids prompt)"
+      echo "  --kubeconfig=PATH    Kubeconfig file path"
+      echo "  --auto               Fully automated (no prompts, auto-generate credentials)"
+      echo "  --install-dir=PATH   Install directory (default: /opt/cloud-ide)"
+      echo ""
+      echo "Fully automated:"
+      echo "  ./deploy.sh --auto --pass=myDockerHubPass"
+      echo ""
+      echo "One-liner (auto mode):"
+      echo "  curl -sSL URL | bash -s -- --auto --pass=\$DOCKER_PASS"
       exit 0 ;;
   esac
 done
@@ -92,6 +108,9 @@ echo ""
 
 if docker info 2>/dev/null | grep -q "Username: ${DOCKER_USER}"; then
   no_change "Already logged in as ${DOCKER_USER}"
+elif [ -n "$DOCKER_PASS" ]; then
+  echo "$DOCKER_PASS" | docker login -u "${DOCKER_USER}" --password-stdin 2>/dev/null
+  configured "Logged in as ${DOCKER_USER}"
 else
   info "Login to Docker Hub as ${DOCKER_USER}"
   echo -e "  ${YELLOW}Enter Docker Hub password:${NC}"
@@ -184,16 +203,24 @@ else
 fi
 
 echo ""
-echo -e "  ${BOLD}Upload a kubeconfig file?${NC}"
-echo -e "  ${DIM}(Paste full path or drag file here, or press Enter to skip)${NC}"
-read -rp "  Kubeconfig path: " KUBE_UPLOAD
-
-if [ -n "$KUBE_UPLOAD" ] && [ -f "$KUBE_UPLOAD" ]; then
-  KUBE_NAME=$(basename "$KUBE_UPLOAD")
-  cp "$KUBE_UPLOAD" "${KUBECONFIG_DIR}/${KUBE_NAME}"
+if [ -n "$KUBECONFIG_PATH_ARG" ] && [ -f "$KUBECONFIG_PATH_ARG" ]; then
+  KUBE_NAME=$(basename "$KUBECONFIG_PATH_ARG")
+  cp "$KUBECONFIG_PATH_ARG" "${KUBECONFIG_DIR}/${KUBE_NAME}"
   configured "Uploaded ${KUBE_NAME} to ${KUBECONFIG_DIR}/"
-elif [ -n "$KUBE_UPLOAD" ]; then
-  warn "File not found: ${KUBE_UPLOAD}"
+elif [ "$AUTO_MODE" = true ]; then
+  info "Auto mode: skipping kubeconfig upload"
+else
+  echo -e "  ${BOLD}Upload a kubeconfig file?${NC}"
+  echo -e "  ${DIM}(Paste full path or drag file here, or press Enter to skip)${NC}"
+  read -rp "  Kubeconfig path: " KUBE_UPLOAD
+
+  if [ -n "$KUBE_UPLOAD" ] && [ -f "$KUBE_UPLOAD" ]; then
+    KUBE_NAME=$(basename "$KUBE_UPLOAD")
+    cp "$KUBE_UPLOAD" "${KUBECONFIG_DIR}/${KUBE_NAME}"
+    configured "Uploaded ${KUBE_NAME} to ${KUBECONFIG_DIR}/"
+  elif [ -n "$KUBE_UPLOAD" ]; then
+    warn "File not found: ${KUBE_UPLOAD}"
+  fi
 fi
 
 # Determine active kubeconfig
@@ -263,6 +290,28 @@ UNIT
   systemctl enable cloud-ide-proxy 2>/dev/null
   systemctl restart cloud-ide-proxy
   configured "Cloud IDE proxy (native) on port ${IDE_PORT}"
+
+  # Auto-generate auth credentials if not present
+  if [ ! -f "${INSTALL_DIR}/.ide-auth.json" ]; then
+    local GEN_PASS
+    GEN_PASS=$(openssl rand -base64 12 2>/dev/null || head -c 16 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 12)
+    local GEN_HASH
+    GEN_HASH=$(echo -n "${GEN_PASS}cloud-ide-salt-2024" | sha256sum | awk '{print $1}')
+    cat > "${INSTALL_DIR}/.ide-auth.json" <<AUTHEOF
+{
+  "users": [
+    { "username": "admin", "hash": "${GEN_HASH}" }
+  ]
+}
+AUTHEOF
+    echo ""
+    echo -e "  ${BOLD}${GREEN}═══ IDE Login Credentials ═══${NC}"
+    echo -e "  ${BOLD}Username:${NC} admin"
+    echo -e "  ${BOLD}Password:${NC} ${GEN_PASS}"
+    echo -e "  ${RED}Save this! It won't be shown again.${NC}"
+    echo -e "  ${BOLD}${GREEN}═════════════════════════════${NC}"
+    echo ""
+  fi
 else
   info "Starting Cloud IDE container..."
   docker run -d --name cloud-ide \

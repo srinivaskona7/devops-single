@@ -321,24 +321,34 @@ setup_auth_credentials() {
   echo ""
 
   local IDE_USER IDE_PASS IDE_PASS2
-  read -rp "  Username [admin]: " IDE_USER
-  IDE_USER="${IDE_USER:-admin}"
 
-  while true; do
-    read -rsp "  Password (min 6 chars): " IDE_PASS
-    echo ""
-    if [ ${#IDE_PASS} -lt 6 ]; then
-      warn "Password must be at least 6 characters"
-      continue
-    fi
-    read -rsp "  Confirm password: " IDE_PASS2
-    echo ""
-    if [ "$IDE_PASS" != "$IDE_PASS2" ]; then
-      warn "Passwords don't match"
-      continue
-    fi
-    break
-  done
+  if [ ! -t 0 ]; then
+    IDE_USER="admin"
+    IDE_PASS=$(openssl rand -base64 12 2>/dev/null || head -c 16 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 12)
+    echo -e "  ${YELLOW}Auto-generated credentials (non-interactive mode):${NC}"
+    echo -e "  Username: ${BOLD}${IDE_USER}${NC}"
+    echo -e "  Password: ${BOLD}${IDE_PASS}${NC}"
+    echo -e "  ${RED}Save this password — it won't be shown again!${NC}"
+  else
+    read -rp "  Username [admin]: " IDE_USER
+    IDE_USER="${IDE_USER:-admin}"
+
+    while true; do
+      read -rsp "  Password (min 6 chars): " IDE_PASS
+      echo ""
+      if [ ${#IDE_PASS} -lt 6 ]; then
+        warn "Password must be at least 6 characters"
+        continue
+      fi
+      read -rsp "  Confirm password: " IDE_PASS2
+      echo ""
+      if [ "$IDE_PASS" != "$IDE_PASS2" ]; then
+        warn "Passwords don't match"
+        continue
+      fi
+      break
+    done
+  fi
 
   local HASH
   HASH=$(echo -n "${IDE_PASS}cloud-ide-salt-2024" | sha256sum | awk '{print $1}')
